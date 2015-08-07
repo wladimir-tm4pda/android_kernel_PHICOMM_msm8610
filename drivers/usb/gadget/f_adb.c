@@ -156,6 +156,14 @@ static struct usb_descriptor_header *ss_adb_descs[] = {
 	NULL,
 };
 
+static struct ms_compat_id_function  adb_compat_id_function = {
+	//.bFirstInterfaceNumber = 1,
+	.reserved = 0x01,
+	.compatibleID = {0},
+	.subCompatibleID = {0},
+	.pad = {0},
+};
+
 static void adb_ready_callback(void);
 static void adb_closed_callback(void);
 
@@ -545,7 +553,8 @@ adb_function_bind(struct usb_configuration *c, struct usb_function *f)
 	if (id < 0)
 		return id;
 	adb_interface_desc.bInterfaceNumber = id;
-
+	adb_compat_id_function.bFirstInterfaceNumber = id;
+	
 	/* allocate endpoints */
 	ret = adb_create_bulk_endpoints(dev, &adb_fullspeed_in_desc,
 			&adb_fullspeed_out_desc);
@@ -670,6 +679,7 @@ static int adb_bind_config(struct usb_configuration *c)
 	dev->function.hs_descriptors = hs_adb_descs;
 	if (gadget_is_superspeed(c->cdev->gadget))
 		dev->function.ss_descriptors = ss_adb_descs;
+	dev->function.usb_compat_id_function = &adb_compat_id_function;
 	dev->function.bind = adb_function_bind;
 	dev->function.unbind = adb_function_unbind;
 	dev->function.set_alt = adb_function_set_alt;

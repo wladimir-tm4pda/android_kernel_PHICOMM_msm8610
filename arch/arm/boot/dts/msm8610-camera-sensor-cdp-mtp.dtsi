@@ -13,7 +13,7 @@
 
 &i2c {
 
-	led_flash0: qcom,led-flash@60 {
+	/*led_flash0: qcom,led-flash@60 {
 		cell-index = <0>;
 		reg = <0x60>;
 		qcom,slave-id = <0x60 0x00 0x0011>;
@@ -29,7 +29,7 @@
 		qcom,gpio-req-tbl-flags = <0 0>;
 		qcom,gpio-req-tbl-label = "FLASH_EN",
 			"FLASH_NOW";
-	};
+	};*/
 
 	actuator0: qcom,actuator@6e {
 		cell-index = <3>;
@@ -117,7 +117,7 @@
 		qcom,csiphy-sd-index = <0>;
 		qcom,csid-sd-index = <0>;
 		qcom,actuator-src = <&actuator0>;
-		qcom,led-flash-src = <&led_flash0>;
+		/*qcom,led-flash-src = <&led_flash0>;*/
 		qcom,eeprom-src = <&eeprom0>;
 		qcom,mount-angle = <90>;
 		qcom,sensor-name = "ov8825";
@@ -156,7 +156,7 @@
 		qcom,csiphy-sd-index = <0>;
 		qcom,csid-sd-index = <0>;
 		qcom,actuator-src = <&actuator0>;
-		qcom,led-flash-src = <&led_flash0>;
+		/*qcom,led-flash-src = <&led_flash0>;*/
 		qcom,mount-angle = <90>;
 		qcom,sensor-name = "imx134";
 		cam_vdig-supply = <&pm8110_l2>;

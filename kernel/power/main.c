@@ -16,6 +16,7 @@
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
 #include <linux/hrtimer.h>
+#include <mach/msm_smem.h>
 
 #include "power.h"
 
@@ -413,6 +414,60 @@ static ssize_t state_store(struct kobject *kobj, struct kobj_attribute *attr,
 
 power_attr(state);
 
+/* zhiqiang.xu add for getting power on reason. */
+struct Poweron_Reason_St {
+	u8 code;
+	u8 *reason;
+} poweron_reason_st[] = {
+	{0x01, "HARD_RESET"},
+	{0x02, "SMPL"},
+	{0x04, "RTC"},
+	{0x08, "DC_CHG"},
+	{0x10, "USB_CHG"},
+	{0x20, "PON1_TRIGGER"},
+	{0x40, "CBL_PWR1_N"},
+	{0x80, "KPDPWR_N"},
+	{0xFF, "error reading power_on_status value"},
+};
+
+/**
+ *  poreason - poweron reason.
+ *
+ *  show() returns the reason of power on.
+ *  store() do nothing.
+ *
+ */
+static ssize_t poreason_show(struct kobject *kobj, struct kobj_attribute *attr,
+		char *buf)
+{
+	ssize_t s = 0;
+	unsigned smem_size;
+	int i;
+
+	boot_reason = *(unsigned int *)
+		(smem_get_entry(SMEM_POWER_ON_STATUS_INFO, &smem_size));
+	printk(KERN_ERR"Boot Reason = %#02x\n", boot_reason);
+	s = sprintf(buf, "Power on reason:\ncode = %#02x reason =", boot_reason);
+
+	for(i = 0; i < sizeof(poweron_reason_st)/sizeof(struct Poweron_Reason_St); i++)
+	{
+		if((0xff != poweron_reason_st[i].code) && (boot_reason & poweron_reason_st[i].code))
+			s += sprintf(buf+s, " %s", poweron_reason_st[i].reason);
+	}
+
+	s += sprintf(buf+s, "\n");
+	return s;
+}
+
+static ssize_t poreason_store(struct kobject *kobj, struct kobj_attribute *attr,
+		const char *buf, size_t n)
+{
+	return n;
+}
+
+power_attr(poreason);
+/* zhiqiang.xu add for getting power on reason. */
+
 #ifdef CONFIG_PM_SLEEP
 /*
  * The 'wakeup_count' attribute, along with the functions defined in
@@ -608,6 +663,9 @@ power_attr(wake_unlock);
 
 static struct attribute *g[] = {
 	&state_attr.attr,
+	/* zhiqiang.xu add for getting power on reason. */
+	&poreason_attr.attr,
+	/* zhiqiang.xu add for getting power on reason. */
 #ifdef CONFIG_PM_TRACE
 	&pm_trace_attr.attr,
 	&pm_trace_dev_match_attr.attr,

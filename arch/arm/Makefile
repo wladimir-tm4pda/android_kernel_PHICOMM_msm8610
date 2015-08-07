@@ -284,7 +284,10 @@ ifeq ($(CONFIG_USE_OF),y)
 KBUILD_DTBS := dtbs
 endif
 
-all:	$(KBUILD_IMAGE) $(KBUILD_DTBS)
+#all:	$(KBUILD_IMAGE) $(KBUILD_DTBS)
+all:	$(KBUILD_IMAGE)
+#wangzan del no need to compile dtbs in kernel process.
+#   	$(KBUILD_DTBS)
 
 boot := arch/arm/boot
 

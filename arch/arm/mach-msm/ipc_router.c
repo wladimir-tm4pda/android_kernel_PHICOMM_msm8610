@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -434,7 +434,7 @@ static void *msm_ipc_router_skb_to_buf(struct sk_buff_head *skb_head,
 				       unsigned int len)
 {
 	struct sk_buff *temp;
-	unsigned int offset = 0, buf_len = 0, copy_len;
+	int offset = 0, buf_len = 0, copy_len;
 	void *buf;
 
 	if (!skb_head) {
@@ -613,27 +613,6 @@ static int calc_tx_header_size(struct rr_packet *pkt,
 		hdr_size = -EINVAL;
 	}
 
-	return hdr_size;
-}
-
-/**
- * calc_rx_header_size() - Calculate the RX header size
- * @xprt_info: XPRT info of the received message.
- *
- * @return: valid header size on success, INT_MAX on failure.
- */
-static int calc_rx_header_size(struct msm_ipc_router_xprt_info *xprt_info)
-{
-	int xprt_version = 0;
-	int hdr_size = INT_MAX;
-
-	if (xprt_info)
-		xprt_version = xprt_info->xprt->get_version(xprt_info->xprt);
-
-	if (xprt_version == IPC_ROUTER_V1)
-		hdr_size = sizeof(struct rr_header_v1);
-	else if (xprt_version == IPC_ROUTER_V2)
-		hdr_size = sizeof(struct rr_header_v2);
 	return hdr_size;
 }
 
@@ -819,8 +798,7 @@ static int post_pkt_to_port(struct msm_ipc_port *port_ptr,
 			    struct rr_packet *pkt, int clone)
 {
 	struct rr_packet *temp_pkt = pkt;
-	void (*notify)(unsigned event, void *oob_data,
-		       size_t oob_data_len, void *priv);
+	void (*notify)(unsigned event, void *priv);
 
 	if (unlikely(!port_ptr || !pkt))
 		return -EINVAL;
@@ -842,7 +820,7 @@ static int post_pkt_to_port(struct msm_ipc_port *port_ptr,
 	notify = port_ptr->notify;
 	mutex_unlock(&port_ptr->port_rx_q_lock_lhb3);
 	if (notify)
-		notify(pkt->hdr.type, NULL, 0, port_ptr->priv);
+		notify(MSM_IPC_ROUTER_READ_CB, port_ptr->priv);
 	return 0;
 }
 
@@ -909,25 +887,9 @@ void msm_ipc_router_add_local_port(struct msm_ipc_port *port_ptr)
 	up_write(&local_ports_lock_lha2);
 }
 
-/**
- * msm_ipc_router_create_raw_port() - Create an IPC Router port
- * @endpoint: User-space space socket information to be cached.
- * @notify: Function to notify incoming events on the port.
- *   @event: Event ID to be handled.
- *   @oob_data: Any out-of-band data associated with the event.
- *   @oob_data_len: Size of the out-of-band data, if valid.
- *   @priv: Private data registered during the port creation.
- * @priv: Private Data to be passed during the event notification.
- *
- * @return: Valid pointer to port on success, NULL on failure.
- *
- * This function is used to create an IPC Router port. The port is used for
- * communication locally or outside the subsystem.
- */
 struct msm_ipc_port *msm_ipc_router_create_raw_port(void *endpoint,
-	void (*notify)(unsigned event, void *oob_data,
-		       size_t oob_data_len, void *priv),
-	void *priv)
+		void (*notify)(unsigned event, void *priv),
+		void *priv)
 {
 	struct msm_ipc_port *port_ptr;
 
@@ -1088,7 +1050,6 @@ static int msm_ipc_router_lookup_resume_tx_port(
  * post_resume_tx() - Post the resume_tx event
  * @rport_ptr: Pointer to the remote port
  * @pkt : The data packet that is received on a resume_tx event
- * @msg: Out of band data to be passed to kernel drivers
  *
  * This function informs about the reception of the resume_tx message from a
  * remote port pointed by rport_ptr to all the local ports that are in the
@@ -1099,7 +1060,7 @@ static int msm_ipc_router_lookup_resume_tx_port(
  * Must be called with rport_ptr->quota_lock_lhb2 locked.
  */
 static void post_resume_tx(struct msm_ipc_router_remote_port *rport_ptr,
-			   struct rr_packet *pkt, union rr_control_msg *msg)
+						   struct rr_packet *pkt)
 {
 	struct msm_ipc_resume_tx_port *rtx_port, *tmp_rtx_port;
 	struct msm_ipc_port *local_port;
@@ -1109,8 +1070,8 @@ static void post_resume_tx(struct msm_ipc_router_remote_port *rport_ptr,
 		local_port =
 			msm_ipc_router_lookup_local_port(rtx_port->port_id);
 		if (local_port && local_port->notify)
-			local_port->notify(IPC_ROUTER_CTRL_CMD_RESUME_TX, msg,
-					   sizeof(*msg), local_port->priv);
+			local_port->notify(MSM_IPC_ROUTER_RESUME_TX,
+						local_port->priv);
 		else if (local_port)
 			post_pkt_to_port(local_port, pkt, 1);
 		else
@@ -1435,6 +1396,8 @@ static char *type_to_str(int i)
 		return "rmv_clnt";
 	case IPC_ROUTER_CTRL_CMD_RESUME_TX:
 		return "resum_tx";
+	case IPC_ROUTER_CTRL_CMD_EXIT:
+		return "cmd_exit";
 	default:
 		return "invalid";
 	}
@@ -1917,7 +1880,7 @@ static int process_resume_tx_msg(union rr_control_msg *msg,
 	}
 	mutex_lock(&rport_ptr->quota_lock_lhb2);
 	rport_ptr->tx_quota_cnt = 0;
-	post_resume_tx(rport_ptr, pkt, msg);
+	post_resume_tx(rport_ptr, pkt);
 	mutex_unlock(&rport_ptr->quota_lock_lhb2);
 prtm_out:
 	up_read(&routing_table_lock_lha3);
@@ -2091,6 +2054,10 @@ static int process_control_msg(struct msm_ipc_router_xprt_info *xprt_info,
 	case IPC_ROUTER_CTRL_CMD_REMOVE_CLIENT:
 		rc = process_rmv_client_msg(xprt_info, msg, pkt);
 		break;
+	case IPC_ROUTER_CTRL_CMD_PING:
+		/* No action needed for ping messages received */
+		RR("o PING\n");
+		break;
 	default:
 		RR("o UNKNOWN(%08x)\n", msg->cmd);
 		rc = -ENOSYS;
@@ -2113,7 +2080,7 @@ static void do_read_data(struct work_struct *work)
 			     read_data);
 
 	while ((pkt = rr_read(xprt_info)) != NULL) {
-		if (pkt->length < calc_rx_header_size(xprt_info) ||
+		if (pkt->length < IPC_ROUTER_HDR_SIZE ||
 		    pkt->length > MAX_IPC_PKT_SIZE) {
 			pr_err("%s: Invalid pkt length %d\n",
 				__func__, pkt->length);
@@ -2306,8 +2273,6 @@ static int loopback_data(struct msm_ipc_port *src,
 	struct msm_ipc_port *port_ptr;
 	struct rr_packet *pkt;
 	int ret_len;
-	struct sk_buff *temp_skb;
-	int align_size;
 
 	if (!data) {
 		pr_err("%s: Invalid pkt pointer\n", __func__);
@@ -2329,11 +2294,6 @@ static int loopback_data(struct msm_ipc_port *src,
 	hdr->dst_node_id = IPC_ROUTER_NID_LOCAL;
 	hdr->dst_port_id = port_id;
 
-	temp_skb = skb_peek_tail(pkt->pkt_fragment_q);
-	align_size = ALIGN_SIZE(pkt->length);
-	skb_put(temp_skb, align_size);
-	pkt->length += align_size;
-
 	down_read(&local_ports_lock_lha2);
 	port_ptr = msm_ipc_router_lookup_local_port(port_id);
 	if (!port_ptr) {
@@ -2344,7 +2304,7 @@ static int loopback_data(struct msm_ipc_port *src,
 		return -ENODEV;
 	}
 
-	ret_len = hdr->size;
+	ret_len = pkt->length;
 	post_pkt_to_port(port_ptr, pkt, 0);
 	update_comm_mode_info(&src->mode_info, NULL);
 	up_read(&local_ports_lock_lha2);
@@ -2778,20 +2738,8 @@ int msm_ipc_router_read_msg(struct msm_ipc_port *port_ptr,
 	return 0;
 }
 
-/**
- * msm_ipc_router_create_port() - Create a IPC Router port/endpoint
- * @notify: Callback function to notify any event on the port.
- *   @event: Event ID to be handled.
- *   @oob_data: Any out-of-band data associated with the event.
- *   @oob_data_len: Size of the out-of-band data, if valid.
- *   @priv: Private data registered during the port creation.
- * @priv: Private info to be passed while the notification is generated.
- *
- * @return: Pointer to the port on success, NULL on error.
- */
 struct msm_ipc_port *msm_ipc_router_create_port(
-	void (*notify)(unsigned event, void *oob_data,
-		       size_t oob_data_len, void *priv),
+	void (*notify)(unsigned event, void *priv),
 	void *priv)
 {
 	struct msm_ipc_port *port_ptr;

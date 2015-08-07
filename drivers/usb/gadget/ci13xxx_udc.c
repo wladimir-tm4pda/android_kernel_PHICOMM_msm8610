@@ -3374,8 +3374,9 @@ static int ci13xxx_vbus_draw(struct usb_gadget *_gadget, unsigned mA)
 {
 	struct ci13xxx *udc = container_of(_gadget, struct ci13xxx, gadget);
 
-	if (udc->transceiver)
+	if (udc->transceiver){
 		return usb_phy_set_power(udc->transceiver, mA);
+	}
 	return -ENOTSUPP;
 }
 

@@ -106,9 +106,18 @@ int msm_flash_led_init(struct msm_led_flash_ctrl_t *fctrl)
 			flashdata->gpio_conf->cam_gpiomux_conf_tbl_size);
 	}
 
-	rc = msm_camera_request_gpio_table(
-		flashdata->gpio_conf->cam_gpio_req_tbl,
-		flashdata->gpio_conf->cam_gpio_req_tbl_size, 1);
+	/*modify by jun.wu for C230W 11/27/2013*/
+	if (flashdata->gpio_conf->gpio_num_info->gpio_num[0] == flashdata->gpio_conf->gpio_num_info->gpio_num[1]) {
+		rc = msm_camera_request_gpio_table(
+			flashdata->gpio_conf->cam_gpio_req_tbl,
+			flashdata->gpio_conf->cam_gpio_req_tbl_size - 1, 1);
+	} else {
+		rc = msm_camera_request_gpio_table(
+			flashdata->gpio_conf->cam_gpio_req_tbl,
+			flashdata->gpio_conf->cam_gpio_req_tbl_size, 1);
+	}
+	/*modify by jun.wu for C230W 11/27/2013*/
+	
 	if (rc < 0) {
 		pr_err("%s: request gpio failed\n", __func__);
 		return rc;
@@ -116,7 +125,7 @@ int msm_flash_led_init(struct msm_led_flash_ctrl_t *fctrl)
 	msleep(20);
 	gpio_set_value_cansleep(
 		flashdata->gpio_conf->gpio_num_info->gpio_num[0],
-		GPIO_OUT_HIGH);
+		GPIO_OUT_LOW);
 
 	if (fctrl->flash_i2c_client && fctrl->reg_setting) {
 		rc = fctrl->flash_i2c_client->i2c_func_tbl->i2c_write_table(
@@ -146,9 +155,19 @@ int msm_flash_led_release(struct msm_led_flash_ctrl_t *fctrl)
 	gpio_set_value_cansleep(
 		flashdata->gpio_conf->gpio_num_info->gpio_num[1],
 		GPIO_OUT_LOW);
-	rc = msm_camera_request_gpio_table(
-		flashdata->gpio_conf->cam_gpio_req_tbl,
-		flashdata->gpio_conf->cam_gpio_req_tbl_size, 0);
+
+	/*modify by jun.wu for C230W 11/27/2013*/
+	if (flashdata->gpio_conf->gpio_num_info->gpio_num[0] == flashdata->gpio_conf->gpio_num_info->gpio_num[1]) {
+		rc = msm_camera_request_gpio_table(
+			flashdata->gpio_conf->cam_gpio_req_tbl,
+			flashdata->gpio_conf->cam_gpio_req_tbl_size - 1, 0);
+	} else {
+		rc = msm_camera_request_gpio_table(
+			flashdata->gpio_conf->cam_gpio_req_tbl,
+			flashdata->gpio_conf->cam_gpio_req_tbl_size, 0);
+	}
+	/*modify by jun.wu for C230W 11/27/2013*/
+
 	if (rc < 0) {
 		pr_err("%s: request gpio failed\n", __func__);
 		return rc;

@@ -331,6 +331,8 @@ static struct msm_vidc_ctrl msm_vdec_ctrls[] = {
 		.maximum = 0xffffff,
 		.default_value = DEFAULT_VIDEO_CONCEAL_COLOR_BLACK,
 		.step = 1,
+		.menu_skip_mask = 0,
+		.qmenu = NULL,
 		.cluster = 0,
 	},
 };
@@ -978,14 +980,6 @@ int msm_vdec_s_fmt(struct msm_vidc_inst *inst, struct v4l2_format *f)
 			dprintk(VIDC_ERR,
 			"Format: %d not supported on OUTPUT port\n",
 			f->fmt.pix_mp.pixelformat);
-			rc = -EINVAL;
-			goto err_invalid_fmt;
-		}
-		if (!(get_hal_codec_type(fmt->fourcc) &
-			inst->core->dec_codec_supported)) {
-			dprintk(VIDC_ERR,
-				"Codec(0x%x) not supported\n",
-				get_hal_codec_type(fmt->fourcc));
 			rc = -EINVAL;
 			goto err_invalid_fmt;
 		}

@@ -93,17 +93,28 @@
 		};
 	};
 
-	flashlight {
+	/*flashlight {
 		compatible = "qcom,leds-gpio-flash";
 		status = "okay";
 		qcom,flash-en = <&msmgpio 18 0>;
-		qcom,flash-now = <&msmgpio 19 0>;
+		qcom,flash-now = <&msmgpio 18 0>;
 		linux,name = "flashlight";
 		linux,default-trigger = "flashlight-trigger";
-	};
+	};*/
 
 	qcom,wdt@f9017000 {
 		qcom,bark-time = <13000>;
+	};
+
+	flashlight: qcom,leds-gpio-flash {
+		cell-index = <0>; 
+		compatible = "qcom,leds-gpio-flash"; 
+		status = "okay"; 
+		qcom,flash-en = <&msmgpio 18 0>; 
+		qcom,flash-now = <&msmgpio 18 0>;
+		linux,name = "flashlight";
+		linux,default-trigger = "flashlight-trigger"; 
+		qcom,current = <255>;
 	};
 
 	gpio_keys {
@@ -128,11 +139,11 @@
                         debounce-interval = <15>;
                 };
 
-                vol_up {
-                        label = "volume_up";
+                vol_down {
+                        label = "volume_down";
                         gpios = <&msmgpio 72 0x1>;
                         linux,input-type = <1>;
-                        linux,code = <115>;
+                        linux,code = <114>;
                         gpio-key,wakeup;
                         debounce-interval = <15>;
 		};

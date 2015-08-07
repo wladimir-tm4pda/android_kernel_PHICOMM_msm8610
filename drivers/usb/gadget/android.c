@@ -376,7 +376,8 @@ static void android_work(struct work_struct *data)
 			msleep(50);
 
 		/* Do not notify on suspend / resume */
-		if (next_state != USB_SUSPENDED && next_state != USB_RESUMED) {
+		/* 2014.03.22 LiGang for Bug: CWE-373, import the patch from CWLA-707*/
+		if (next_state != USB_SUSPENDED && next_state != USB_RESUMED ) {
 			kobject_uevent_env(&dev->dev->kobj, KOBJ_CHANGE,
 					   uevent_envp);
 			last_uevent = next_state;
@@ -2651,11 +2652,17 @@ static int android_bind(struct usb_composite_dev *cdev)
 	device_desc.iProduct = id;
 
 	/* Default strings - should be updated by userspace */
-	strlcpy(manufacturer_string, "Android",
+        #ifdef  CONFIG_PHICOMM_BOARD_C230WJA
+	strlcpy(manufacturer_string, "Karbonn Inc.",
 		sizeof(manufacturer_string) - 1);
-	strlcpy(product_string, "Android", sizeof(product_string) - 1);
+	strlcpy(product_string, "Karbonn  Device", sizeof(product_string) - 1);
 	strlcpy(serial_string, "0123456789ABCDEF", sizeof(serial_string) - 1);
-
+        #else
+	strlcpy(manufacturer_string, "PHICOMM Inc.",
+		sizeof(manufacturer_string) - 1);
+	strlcpy(product_string, "PHICOMM Mobile Device", sizeof(product_string) - 1);
+	strlcpy(serial_string, "0123456789ABCDEF", sizeof(serial_string) - 1);
+        #endif
 	id = usb_string_id(cdev);
 	if (id < 0)
 		return id;

@@ -167,6 +167,7 @@ struct qpnp_bms_chip {
 	int				max_voltage_uv;
 	int				r_conn_mohm;
 	int				shutdown_soc_valid_limit;
+	int				shutdown_soc_chg_valid_limit;
 	int				adjust_soc_low_threshold;
 	int				chg_term_ua;
 	enum battery_type		batt_type;
@@ -3495,6 +3496,8 @@ static void load_shutdown_data(struct qpnp_bms_chip *chip)
 	bool invalid_stored_soc;
 	bool offmode_battery_replaced;
 	bool shutdown_soc_out_of_limit;
+	struct power_supply *usb_psy = NULL;
+	union power_supply_propval ret = {0,};
 
 	/*
 	 * Read the saved shutdown SoC from the configured register and
@@ -3508,10 +3511,26 @@ static void load_shutdown_data(struct qpnp_bms_chip *chip)
 	 * is close enough.
 	 */
 	calculated_soc = recalculate_raw_soc(chip);
-	shutdown_soc_out_of_limit = (abs(shutdown_soc - calculated_soc)
-			> chip->shutdown_soc_valid_limit);
-	pr_debug("calculated_soc = %d, valid_limit = %d\n",
-			calculated_soc, chip->shutdown_soc_valid_limit);
+	
+	/* Use different soc ajdust threshold between charging and discharging. */
+	usb_psy = power_supply_get_by_name("usb");
+	if (usb_psy) {
+		usb_psy->get_property(usb_psy, POWER_SUPPLY_PROP_ONLINE, &ret);
+	}
+
+	if(1 == ret.intval)
+	{
+		shutdown_soc_out_of_limit = (abs(shutdown_soc - calculated_soc)
+				> chip->shutdown_soc_chg_valid_limit);
+	}
+	else
+	{
+		shutdown_soc_out_of_limit = (abs(shutdown_soc - calculated_soc)
+				> chip->shutdown_soc_valid_limit);
+	}
+	pr_debug("usb connected = %d\n", ret.intval);
+	pr_debug("calculated_soc = %d, valid_limit = %d chg_valid_limit = %d\n",
+			calculated_soc, chip->shutdown_soc_valid_limit, chip->shutdown_soc_chg_valid_limit);
 
 	/*
 	 * Check if the battery has been replaced while the system was powered
@@ -3749,6 +3768,8 @@ static inline int bms_read_properties(struct qpnp_bms_chip *chip)
 	SPMI_PROP_READ(chg_term_ua, "chg-term-ua", rc);
 	SPMI_PROP_READ(shutdown_soc_valid_limit,
 			"shutdown-soc-valid-limit", rc);
+	SPMI_PROP_READ(shutdown_soc_chg_valid_limit,
+			"shutdown-soc-chg-valid-limit", rc);
 	SPMI_PROP_READ(adjust_soc_low_threshold,
 			"adjust-soc-low-threshold", rc);
 	SPMI_PROP_READ(batt_type, "batt-type", rc);
@@ -3817,9 +3838,9 @@ static inline int bms_read_properties(struct qpnp_bms_chip *chip)
 	pr_debug("dts data: r_sense_uohm:%d, v_cutoff_uv:%d, max_v:%d\n",
 			chip->r_sense_uohm, chip->v_cutoff_uv,
 			chip->max_voltage_uv);
-	pr_debug("r_conn:%d, shutdown_soc: %d, adjust_soc_low:%d\n",
+	pr_debug("r_conn:%d, shutdown_soc: %d, shutdown_chg_soc: %d, adjust_soc_low:%d\n",
 			chip->r_conn_mohm, chip->shutdown_soc_valid_limit,
-			chip->adjust_soc_low_threshold);
+			chip->shutdown_soc_chg_valid_limit, chip->adjust_soc_low_threshold);
 	pr_debug("chg_term_ua:%d, batt_type:%d\n",
 			chip->chg_term_ua,
 			chip->batt_type);

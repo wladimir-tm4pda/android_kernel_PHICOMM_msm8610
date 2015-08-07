@@ -205,8 +205,6 @@ static long ipa_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			retval = -EFAULT;
 			break;
 		}
-		/* null terminate the string */
-		nat_mem.dev_name[IPA_RESOURCE_NAME_MAX - 1] = '\0';
 
 		if (allocate_nat_device(&nat_mem)) {
 			retval = -EFAULT;
@@ -544,13 +542,6 @@ static long ipa_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			retval = -EFAULT;
 			break;
 		}
-
-		if (((struct ipa_ioc_query_intf_tx_props *)header)->num_tx_props
-				> IPA_NUM_PROPS_MAX) {
-			retval = -EFAULT;
-			break;
-		}
-
 		pyld_sz = sz + ((struct ipa_ioc_query_intf_tx_props *)
 				header)->num_tx_props *
 			sizeof(struct ipa_ioc_tx_intf_prop);
@@ -579,13 +570,6 @@ static long ipa_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			retval = -EFAULT;
 			break;
 		}
-
-		if (((struct ipa_ioc_query_intf_rx_props *)header)->num_rx_props
-				> IPA_NUM_PROPS_MAX) {
-			retval = -EFAULT;
-			break;
-		}
-
 		pyld_sz = sz + ((struct ipa_ioc_query_intf_rx_props *)
 				header)->num_rx_props *
 			sizeof(struct ipa_ioc_rx_intf_prop);
@@ -928,13 +912,11 @@ static int ipa_load_pipe_connection(struct platform_device *pdev,
 				    enum a2_mux_pipe_direction  pipe_dir,
 				    struct a2_mux_pipe_connection *pdata)
 {
-	struct device_node *node;
+	struct device_node *node = pdev->dev.of_node;
 	int rc = 0;
 
 	if (!pdata || !pdev)
 		goto err;
-
-	node = pdev->dev.of_node;
 
 	/* retrieve device tree parameters */
 	for_each_child_of_node(pdev->dev.of_node, node)
@@ -975,8 +957,8 @@ err:
 static int ipa_update_connections_info(struct device_node *node,
 		struct a2_mux_pipe_connection     *pipe_connection)
 {
-	u32      rc = 0;
-	char     *key = NULL;
+	u32      rc;
+	char     *key;
 	uint32_t val;
 	enum ipa_pipe_mem_type mem_type;
 
@@ -1040,8 +1022,7 @@ static int ipa_update_connections_info(struct device_node *node,
 
 	return 0;
 err:
-	IPAERR("%s: Error in name %s key %s\n", __func__,
-		node->full_name, (key != NULL) ? key : "Null");
+	IPAERR("%s: Error in name %s key %s\n", __func__, node->full_name, key);
 
 	return rc;
 }

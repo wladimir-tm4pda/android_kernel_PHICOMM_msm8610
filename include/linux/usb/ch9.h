@@ -960,4 +960,20 @@ enum usb_device_state {
  */
 #define USB_SELF_POWER_VBUS_MAX_DRAW		100
 
+struct ms_compat_id_header {
+	__le32 dwLength;
+	__le16 bcdVersion;
+	__le16 wIndex;
+	__u8   bCount;
+	__u8   pad[7];
+} __attribute__ ((packed));
+
+struct ms_compat_id_function {
+	__u8  bFirstInterfaceNumber;
+	__u8  reserved;
+	__u8  compatibleID[8];
+	__u8  subCompatibleID[8];
+	__u8  pad[6];
+}__attribute__ ((packed));
+
 #endif /* __LINUX_USB_CH9_H */

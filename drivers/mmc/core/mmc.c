@@ -25,6 +25,43 @@
 #include "mmc_ops.h"
 #include "sd_ops.h"
 
+//gxh mod for add emmc info to fdv
+#ifdef CONFIG_DEVICE_VERSION
+#include <mach/fdv.h>
+struct fdv_emmc_info {
+    char manf_name[32];
+    u32  manf_id;
+};
+static struct fdv_emmc_info fdv_emmc_id_table[] = {
+    {"Toshiba", 0x98 },
+    {"Micron",  0x2C },
+    {"Hynix",   0xAD },
+    {"Hynix",   0x90 },
+    {"SanDisk", 0x45 },
+    {"Samsung", 0xCE },
+    {"Sony",    0xF1 },
+    //{"Numonyx", 0xFE },
+    {"Micron",  0xFE },
+    {"Unknow",  0xFFFF },
+};
+
+static char *manfid_to_name(u32 id)
+{
+    int i = 0;
+
+    for(i = 0; i < sizeof(fdv_emmc_id_table)/sizeof(struct fdv_emmc_info); i++)
+    {
+        if(fdv_emmc_id_table[i].manf_id == id)
+        {
+            return fdv_emmc_id_table[i].manf_name;
+        }
+    }
+
+    return fdv_emmc_id_table[i - 1].manf_name;
+}
+#endif
+//gxh mod for add emmc info to fdv end
+
 static const unsigned int tran_exp[] = {
 	10000,		100000,		1000000,	10000000,
 	0,		0,		0,		0
@@ -1420,6 +1457,13 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 		err = mmc_decode_cid(card);
 		if (err)
 			goto free_card;
+
+        //gxh mod for add emmc info to fdv info
+#ifdef CONFIG_DEVICE_VERSION
+        register_fdv_with_desc("EMMC", manfid_to_name(card->cid.manfid), (card->cid.manfid << 24)| card->cid.oemid, card->cid.prod_name);
+        confirm_fdv("EMMC", manfid_to_name(card->cid.manfid), (card->cid.manfid << 24 )| card->cid.oemid );
+#endif
+        //gxh mod for add emmc info to fdv info end
 	}
 
 	/*

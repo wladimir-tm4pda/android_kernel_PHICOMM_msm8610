@@ -291,6 +291,15 @@ static struct usb_gadget_strings *mtp_strings[] = {
 	NULL,
 };
 
+#if 1
+static struct ms_compat_id_function  mtp_compat_id_function = {
+	//.bFirstInterfaceNumber = 0,
+	.reserved = 0x01,
+	.compatibleID = {'M', 'T', 'P'},
+	.subCompatibleID = {0},
+	.pad = {0},
+};
+#else
 /* Microsoft MTP OS String */
 static u8 mtp_os_string[] = {
 	18, /* sizeof(mtp_os_string) */
@@ -338,6 +347,7 @@ struct {
 		.compatibleID = { 'M', 'T', 'P' },
 	},
 };
+#endif
 
 struct mtp_device_status {
 	__le16	wLength;
@@ -1119,7 +1129,7 @@ static int mtp_ctrlrequest(struct usb_composite_dev *cdev,
 			"%02x.%02x v%04x i%04x l%u\n",
 			ctrl->bRequestType, ctrl->bRequest,
 			w_value, w_index, w_length);
-
+#if 0 /* We handle Microsoft OS compatible Descriptor in composite_seup.c */
 	/* Handle MTP OS string */
 	if (ctrl->bRequestType ==
 			(USB_DIR_IN | USB_TYPE_STANDARD | USB_RECIP_DEVICE)
@@ -1141,7 +1151,9 @@ static int mtp_ctrlrequest(struct usb_composite_dev *cdev,
 					w_length : sizeof(mtp_ext_config_desc));
 			memcpy(cdev->req->buf, &mtp_ext_config_desc, value);
 		}
-	} else if ((ctrl->bRequestType & USB_TYPE_MASK) == USB_TYPE_CLASS) {
+	} else 
+#endif	
+	if ((ctrl->bRequestType & USB_TYPE_MASK) == USB_TYPE_CLASS) {
 		DBG(cdev, "class request: %d index: %d value: %d length: %d\n",
 			ctrl->bRequest, w_index, w_value, w_length);
 
@@ -1212,7 +1224,8 @@ mtp_function_bind(struct usb_configuration *c, struct usb_function *f)
 	if (id < 0)
 		return id;
 	mtp_interface_desc.bInterfaceNumber = id;
-
+	mtp_compat_id_function.bFirstInterfaceNumber = id;
+	
 	/* allocate endpoints */
 	ret = mtp_create_bulk_endpoints(dev, &mtp_fullspeed_in_desc,
 			&mtp_fullspeed_out_desc, &mtp_intr_desc);
@@ -1356,6 +1369,7 @@ static int mtp_bind_config(struct usb_configuration *c, bool ptp_config)
 		if (gadget_is_superspeed(c->cdev->gadget))
 			dev->function.ss_descriptors = ss_mtp_descs;
 	}
+	dev->function.usb_compat_id_function = &mtp_compat_id_function;
 	dev->function.bind = mtp_function_bind;
 	dev->function.unbind = mtp_function_unbind;
 	dev->function.set_alt = mtp_function_set_alt;

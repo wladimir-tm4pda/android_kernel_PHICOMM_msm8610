@@ -123,8 +123,6 @@ enum wcd9xxx_mbhc_clk_freq {
 enum wcd9xxx_mbhc_event_state {
 	MBHC_EVENT_PA_HPHL,
 	MBHC_EVENT_PA_HPHR,
-	MBHC_EVENT_PRE_TX_3_ON,
-	MBHC_EVENT_POST_TX_3_OFF,
 };
 
 struct wcd9xxx_mbhc_general_cfg {
@@ -270,6 +268,8 @@ struct wcd9xxx_mbhc_cb {
 	void (*setup_int_rbias) (struct snd_soc_codec *, bool);
 	void (*pull_mb_to_vddio) (struct snd_soc_codec *, bool);
 };
+//#define HS_DET_POLLING
+//#define HS_DET_TIMER
 
 struct wcd9xxx_mbhc {
 	bool polling_active;
@@ -346,6 +346,15 @@ struct wcd9xxx_mbhc {
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *debugfs_poke;
 	struct dentry *debugfs_mbhc;
+#endif
+#ifdef HS_DET_POLLING
+	//add by fj
+	struct work_struct  hs_det_work;
+	struct workqueue_struct *hs_det_wq;
+	struct mutex hs_det_mutex;
+#ifdef HS_DET_TIMER
+	struct hrtimer hs_det_timer;
+#endif
 #endif
 };
 

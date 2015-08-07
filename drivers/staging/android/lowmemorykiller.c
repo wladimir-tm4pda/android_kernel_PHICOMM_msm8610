@@ -40,7 +40,6 @@
 #include <linux/mutex.h>
 #include <linux/delay.h>
 #include <linux/swap.h>
-#include <linux/fs.h>
 
 #ifdef CONFIG_HIGHMEM
 #define _ZONE ZONE_HIGHMEM
@@ -67,9 +66,6 @@ static int lmk_fast_run = 1;
 
 static unsigned long lowmem_deathpending_timeout;
 
-static int done_reclaim_fs = 0;
-
-
 #define lowmem_print(level, x...)			\
 	do {						\
 		if (lowmem_debug_level >= (level))	\
@@ -90,22 +86,6 @@ static int test_task_flag(struct task_struct *p, int flag)
 	} while_each_thread(p, t);
 
 	return 0;
-}
-static DEFINE_MUTEX(drop_slab_mutex);
-static void drop_slab1(void)
-{
-	int nr_objects;
-	struct shrink_control shrink = {
-		.gfp_mask = GFP_KERNEL,
-	};
-	if (!mutex_trylock(&drop_slab_mutex))
-		return;
-
-	do {
-		nr_objects = shrink_slab(&shrink, 1000, 1000);
-	} while (nr_objects > 10);
-
-	mutex_unlock(&drop_slab_mutex);
 }
 
 static DEFINE_MUTEX(scan_mutex);
@@ -266,14 +246,8 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	}
 
 	other_free = global_page_state(NR_FREE_PAGES);
-
-	if (global_page_state(NR_SHMEM) + total_swapcache_pages <
-		global_page_state(NR_FILE_PAGES))
-		other_file = global_page_state(NR_FILE_PAGES) -
-						global_page_state(NR_SHMEM) -
-						total_swapcache_pages;
-	else
-		other_file = 0;
+	other_file = global_page_state(NR_FILE_PAGES) -
+						global_page_state(NR_SHMEM);
 
 	tune_lmk_param(&other_free, &other_file, sc);
 
@@ -288,10 +262,6 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 			break;
 		}
 	}
-
-	if (min_score_adj >= lowmem_adj[4])
-		done_reclaim_fs = 0;
-
 	if (nr_to_scan > 0)
 		lowmem_print(3, "lowmem_shrink %lu, %x, ofree %d %d, ma %d\n",
 				nr_to_scan, sc->gfp_mask, other_free,
@@ -376,13 +346,6 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	lowmem_print(4, "lowmem_shrink %lu, %x, return %d\n",
 		     nr_to_scan, sc->gfp_mask, rem);
 	mutex_unlock(&scan_mutex);
-
-	if (min_score_adj <= lowmem_adj[3] && !done_reclaim_fs && current_is_kswapd()) {
-		// We are very low on memory, do extra work to free memory
-		done_reclaim_fs = 1;
-		drop_slab1();
-	}
-
 	return rem;
 }
 

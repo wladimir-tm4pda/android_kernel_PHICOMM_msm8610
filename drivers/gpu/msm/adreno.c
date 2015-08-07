@@ -330,12 +330,6 @@ int adreno_perfcounter_read_group(struct adreno_device *adreno_dev,
 			goto done;
 		}
 
-		/* Verify that the group ID is within range */
-		if (list[j].groupid >= counters->group_count) {
-			ret = -EINVAL;
-			goto done;
-		}
-
 		group = &(counters->groups[list[j].groupid]);
 
 		/* group/counter iterator */
@@ -662,8 +656,6 @@ static void adreno_cleanup_pt(struct kgsl_device *device,
 
 	kgsl_mmu_unmap(pagetable, &rb->buffer_desc);
 
-	kgsl_mmu_unmap(pagetable, &rb->memptrs_desc);
-
 	kgsl_mmu_unmap(pagetable, &device->memstore);
 
 	kgsl_mmu_unmap(pagetable, &adreno_dev->pwron_fixup);
@@ -684,12 +676,9 @@ static int adreno_setup_pt(struct kgsl_device *device,
 
 	/*
 	 * ALERT: Order of these mapping is important to
-	 * Keep the most used entries like memptrs, memstore
+	 * Keep the most used entries like memstore
 	 * and mmu setstate memory by TLB prefetcher.
 	 */
-
-	if (!result)
-		result = kgsl_mmu_map_global(pagetable, &rb->memptrs_desc);
 
 	if (!result)
 		result = kgsl_mmu_map_global(pagetable, &device->memstore);
@@ -3457,9 +3446,6 @@ struct kgsl_memdesc *adreno_find_region(struct kgsl_device *device,
 	if (kgsl_gpuaddr_in_memdesc(&ringbuffer->buffer_desc, gpuaddr, size))
 		return &ringbuffer->buffer_desc;
 
-	if (kgsl_gpuaddr_in_memdesc(&ringbuffer->memptrs_desc, gpuaddr, size))
-		return &ringbuffer->memptrs_desc;
-
 	if (kgsl_gpuaddr_in_memdesc(&device->memstore, gpuaddr, size))
 		return &device->memstore;
 
@@ -3784,7 +3770,7 @@ unsigned int adreno_ft_detect(struct kgsl_device *device,
 				if (task)
 					get_task_comm(pid_name, task);
 			} else {
-				KGSL_DRV_INFO(device,
+				KGSL_DRV_ERR(device,
 					"Fault tolerance no context found\n");
 			}
 		}

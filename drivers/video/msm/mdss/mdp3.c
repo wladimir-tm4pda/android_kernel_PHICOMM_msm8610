@@ -182,7 +182,6 @@ static irqreturn_t mdp3_irq_handler(int irq, void *ptr)
 	int i = 0;
 	struct mdp3_hw_resource *mdata = (struct mdp3_hw_resource *)ptr;
 	u32 mdp_interrupt = 0;
-	u32 mdp_status = 0;
 
 	spin_lock(&mdata->irq_lock);
 	if (!mdata->irq_mask)
@@ -191,8 +190,8 @@ static irqreturn_t mdp3_irq_handler(int irq, void *ptr)
 	clk_enable(mdp3_res->clocks[MDP3_CLK_AHB]);
 	clk_enable(mdp3_res->clocks[MDP3_CLK_CORE]);
 
-	mdp_status = MDP3_REG_READ(MDP3_REG_INTR_STATUS);
-	mdp_interrupt = mdp_status;
+	mdp_interrupt = MDP3_REG_READ(MDP3_REG_INTR_STATUS);
+	MDP3_REG_WRITE(MDP3_REG_INTR_CLEAR, mdp_interrupt);
 	pr_debug("mdp3_irq_handler irq=%d\n", mdp_interrupt);
 
 	mdp_interrupt &= mdata->irq_mask;
@@ -203,7 +202,6 @@ static irqreturn_t mdp3_irq_handler(int irq, void *ptr)
 		mdp_interrupt = mdp_interrupt >> 1;
 		i++;
 	}
-	MDP3_REG_WRITE(MDP3_REG_INTR_CLEAR, mdp_status);
 
 	clk_disable(mdp3_res->clocks[MDP3_CLK_AHB]);
 	clk_disable(mdp3_res->clocks[MDP3_CLK_CORE]);
@@ -754,6 +752,8 @@ int mdp3_iommu_context_init(void)
 int mdp3_iommu_init(void)
 {
 	int ret;
+
+	mutex_init(&mdp3_res->iommu_lock);
 
 	mutex_init(&mdp3_res->iommu_lock);
 

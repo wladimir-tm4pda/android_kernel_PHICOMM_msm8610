@@ -18,19 +18,28 @@ KERNEL_IMG=$(KERNEL_OUT)/arch/arm/boot/Image
 DTS_NAMES ?= $(shell $(PERL) -e 'while (<>) {$$a = $$1 if /CONFIG_ARCH_((?:MSM|QSD|MPQ)[a-zA-Z0-9]+)=y/; $$r = $$1 if /CONFIG_MSM_SOC_REV_(?!NONE)(\w+)=y/; $$arch = $$arch.lc("$$a$$r ") if /CONFIG_ARCH_((?:MSM|QSD|MPQ)[a-zA-Z0-9]+)=y/} print $$arch;' $(KERNEL_CONFIG))
 KERNEL_USE_OF ?= $(shell $(PERL) -e '$$of = "n"; while (<>) { if (/CONFIG_USE_OF=y/) { $$of = "y"; break; } } print $$of;' kernel/arch/arm/configs/$(KERNEL_DEFCONFIG))
 
+define match-dts-path
+$(if $(strip $(wildcard $(TOP)/kernel/arch/arm/boot/$(strip $(PHICOMM_PROJECT_NAME))-dts/$(DTS_NAME)*.dts)),$(strip $(PHICOMM_PROJECT_NAME))-dts,dts)
+endef
+
 ifeq "$(KERNEL_USE_OF)" "y"
-DTS_FILES = $(wildcard $(TOP)/kernel/arch/arm/boot/dts/$(DTS_NAME)*.dts)
+#DTS_FILES = $(wildcard $(TOP)/kernel/arch/arm/boot/dts/$(DTS_NAME)*.dts)
+DTS_FILES = $(wildcard $(TOP)/kernel/arch/arm/boot/$(call match-dts-path)/$(DTS_NAME)*.dts)
 DTS_FILE = $(lastword $(subst /, ,$(1)))
 DTB_FILE = $(addprefix $(KERNEL_OUT)/arch/arm/boot/,$(patsubst %.dts,%.dtb,$(call DTS_FILE,$(1))))
 ZIMG_FILE = $(addprefix $(KERNEL_OUT)/arch/arm/boot/,$(patsubst %.dts,%-zImage,$(call DTS_FILE,$(1))))
 KERNEL_ZIMG = $(KERNEL_OUT)/arch/arm/boot/zImage
 DTC = $(KERNEL_OUT)/scripts/dtc/dtc
+DTS_INC_PATH = $(KERNEL_OUT)/arch/arm/boot/useddtsi
 
 define append-dtb
 mkdir -p $(KERNEL_OUT)/arch/arm/boot;\
+mkdir -p $(KERNEL_OUT)/arch/arm/boot/useddtsi;\
+cp -f $(TOP)/kernel/arch/arm/boot/dts/*.dtsi $(DTS_INC_PATH) ;\
+cp -f $(TOP)/kernel/arch/arm/boot/$(call match-dts-path)/*.dtsi $(DTS_INC_PATH);\
 $(foreach DTS_NAME, $(DTS_NAMES), \
    $(foreach d, $(DTS_FILES), \
-      $(DTC) -p 1024 -O dtb -o $(call DTB_FILE,$(d)) $(d); \
+	  $(DTC) -i $(DTS_INC_PATH) -p 1024 -O dtb -o $(call DTB_FILE,$(d)) $(d); \
       cat $(KERNEL_ZIMG) $(call DTB_FILE,$(d)) > $(call ZIMG_FILE,$(d));))
 endef
 else

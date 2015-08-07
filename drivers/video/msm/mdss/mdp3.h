@@ -26,7 +26,6 @@
 #include "mdss_fb.h"
 
 #define MDP_VSYNC_CLK_RATE	19200000
-#define KOFF_TIMEOUT msecs_to_jiffies(84)
 
 enum  {
 	MDP3_CLK_AHB,

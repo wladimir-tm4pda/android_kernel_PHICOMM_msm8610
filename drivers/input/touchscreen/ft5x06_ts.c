@@ -16,6 +16,14 @@
  *
  */
 
+/* =======================================================================
+ *
+ * when        	who         	why                           		comment tag
+ *
+ * ----------	---------	-------------------------------------	--------------------------
+ * 2014-05-10	guofeizhi	make FT5306 compitable with Goodix	FEIXUN_TP_COMPATIBILITY_GUOFEIZHI_001
+ */
+
 #include <linux/i2c.h>
 #include <linux/input.h>
 #include <linux/input/mt.h>
@@ -31,10 +39,13 @@
 #include <linux/debugfs.h>
 #include <linux/input/ft5x06_ts.h>
 
+#ifdef CONFIG_DEVICE_VERSION
+#include <mach/fdv.h>
+#endif
+
 #if defined(CONFIG_FB)
 #include <linux/notifier.h>
 #include <linux/fb.h>
-
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 #include <linux/earlysuspend.h>
 /* Early-suspend level */
@@ -484,7 +495,7 @@ static int ft5x06_ts_suspend(struct device *dev)
 	struct ft5x06_ts_data *data = dev_get_drvdata(dev);
 	char txbuf[2], i;
 	int err;
-
+	printk("%s\n", __func__);
 	if (data->loading_fw) {
 		dev_info(dev, "Firmware loading in process...\n");
 		return 0;
@@ -543,7 +554,7 @@ static int ft5x06_ts_resume(struct device *dev)
 {
 	struct ft5x06_ts_data *data = dev_get_drvdata(dev);
 	int err;
-
+	printk("%s\n", __func__);
 	if (!data->suspended) {
 		dev_dbg(dev, "Already in awake state\n");
 		return 0;
@@ -1369,7 +1380,11 @@ static int ft5x06_parse_dt(struct device *dev,
 	return -ENODEV;
 }
 #endif
-
+//FEIXUN_TP_COMPATIBILITY_GUOFEIZHI_001 start
+#if defined (CONFIG_PHICOMM_BOARD_E550W)
+extern unsigned TP_EXIST_FLAG;
+#endif
+//FEIXUN_TP_COMPATIBILITY_GUOFEIZHI_001 end
 static int ft5x06_ts_probe(struct i2c_client *client,
 			   const struct i2c_device_id *id)
 {
@@ -1380,7 +1395,15 @@ static int ft5x06_ts_probe(struct i2c_client *client,
 	u8 reg_value;
 	u8 reg_addr;
 	int err, len;
-
+//FEIXUN_TP_COMPATIBILITY_GUOFEIZHI_001 start
+#if defined (CONFIG_PHICOMM_BOARD_E550W)
+	if(!!TP_EXIST_FLAG)
+	{
+		printk("FT6306: TP_EXIST_FLAG = %d, other TP already registered.\n", TP_EXIST_FLAG);
+		return -1;
+	}
+#endif
+//FEIXUN_TP_COMPATIBILITY_GUOFEIZHI_001 end
 	if (client->dev.of_node) {
 		pdata = devm_kzalloc(&client->dev,
 			sizeof(struct ft5x06_ts_platform_data), GFP_KERNEL);
@@ -1655,7 +1678,13 @@ static int ft5x06_ts_probe(struct i2c_client *client,
 	data->early_suspend.resume = ft5x06_ts_late_resume;
 	register_early_suspend(&data->early_suspend);
 #endif
-
+//FEIXUN_TP_COMPATIBILITY_GUOFEIZHI_001 start
+#if defined (CONFIG_PHICOMM_BOARD_E550W)
+    confirm_fdv(DEV_TP,"Unirete",MANUF_GOODIX_ID_UNIRETE|0x38);
+    TP_EXIST_FLAG = 1;
+    printk("FT6306: TP already registered.\n");
+#endif
+//FEIXUN_TP_COMPATIBILITY_GUOFEIZHI_001 end
 	return 0;
 
 free_debug_dir:
@@ -1762,6 +1791,11 @@ static struct i2c_driver ft5x06_ts_driver = {
 
 static int __init ft5x06_ts_init(void)
 {
+//FEIXUN_TP_COMPATIBILITY_GUOFEIZHI_001 start
+#if defined (CONFIG_PHICOMM_BOARD_E550W)
+	register_fdv_with_desc(DEV_TP, "Unirete", MANUF_GOODIX_ID_UNIRETE|0x38, "FT6306");
+#endif
+//FEIXUN_TP_COMPATIBILITY_GUOFEIZHI_001 end
 	return i2c_add_driver(&ft5x06_ts_driver);
 }
 module_init(ft5x06_ts_init);

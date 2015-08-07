@@ -13,6 +13,7 @@
 #include <linux/delay.h>
 #include <linux/export.h>
 #include <linux/bug.h>
+#include <mach/msm_watchdog_v2.h>
 
 void __raw_spin_lock_init(raw_spinlock_t *lock, const char *name,
 			  struct lock_class_key *key)
@@ -65,7 +66,7 @@ static void spin_dump(raw_spinlock_t *lock, const char *msg)
 		owner ? owner->comm : "<none>",
 		owner ? task_pid_nr(owner) : -1,
 		lock->owner_cpu);
-	BUG_ON(PANIC_CORRUPTION);
+	msm_cause_bite();
 	dump_stack();
 }
 
@@ -108,7 +109,7 @@ static inline void debug_spin_unlock(raw_spinlock_t *lock)
 static void __spin_lock_debug(raw_spinlock_t *lock)
 {
 	u64 i;
-	u64 loops = (loops_per_jiffy * HZ);
+	u64 loops = (loops_per_jiffy * HZ) >> 1;
 
 	for (i = 0; i < loops; i++) {
 		if (arch_spin_trylock(&lock->raw_lock))

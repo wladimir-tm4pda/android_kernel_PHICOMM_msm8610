@@ -132,6 +132,7 @@ void __init msm8226_add_drivers(void)
 void __init msm8226_init(void)
 {
 	struct of_dev_auxdata *adata = msm8226_auxdata_lookup;
+	unsigned smem_size;
 
 	if (socinfo_init() < 0)
 		pr_err("%s: socinfo_init() failed\n", __func__);
@@ -139,6 +140,11 @@ void __init msm8226_init(void)
 	msm8226_init_gpiomux();
 	board_dt_populate(adata);
 	msm8226_add_drivers();
+	/* zhiqiang.xu add for getting power on reason. */
+	boot_reason = *(unsigned int *)
+		(smem_get_entry(SMEM_POWER_ON_STATUS_INFO, &smem_size));
+	printk(KERN_ERR"Boot Reason = 0x%02x\n", boot_reason);
+	/* zhiqiang.xu add for getting power on reason. */
 }
 
 static const char *msm8226_dt_match[] __initconst = {

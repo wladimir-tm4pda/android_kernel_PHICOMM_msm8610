@@ -12,26 +12,25 @@
  */
 
 &soc {
-
 	led_flash0: qcom,camera-led-flash {
 		cell-index = <0>;
 		compatible = "qcom,camera-led-flash";
 		qcom,flash-type = <3>;
-		qcom,flash-source = <&gpio_flash>;
-		qcom,torch-source = <&gpio_flash>;
-		status = "disabled";
+		qcom,flash-source = <&flashlight>;
 	};
 };
-&i2c {
 
+&i2c {
+	/*c230w back camera*/
 	qcom,camera@20 {
-		compatible = "shinetech,s5k4e1";
+		compatible = "qcom,gc2235";
 		reg = <0x20>;
-		qcom,slave-id = <0x20 0x0000 0x4e10>;
+		qcom,slave-id = <0x78 0xf0 0x2235>;
 		qcom,csiphy-sd-index = <0>;
 		qcom,csid-sd-index = <0>;
 		qcom,mount-angle = <90>;
-		qcom,sensor-name = "SKUAB_ST_s5k4e1";
+		qcom,sensor-name = "gc2235_c230w";
+		qcom,led-flash-src = <&led_flash0>;
 		cam_vdig-supply = <&pm8110_l2>;
 		cam_vana-supply = <&pm8110_l19>;
 		cam_vio-supply = <&pm8110_l14>;
@@ -43,21 +42,29 @@
 		qcom,gpio-no-mux = <0>;
 		gpios = <&msmgpio 13 0>,
 			<&msmgpio 21 0>,
-			<&msmgpio 20 0>;
+			<&msmgpio 20 0>,
+			<&msmgpio 70 0>,
+			<&msmgpio 71 0>;
 		qcom,gpio-reset = <1>;
 		qcom,gpio-standby = <2>;
-		qcom,gpio-req-tbl-num = <0 1 2>;
-		qcom,gpio-req-tbl-flags = <1 0 0>;
+		qcom,gpio-vana = <3>;
+		qcom,gpio-vdig = <4>;
+		qcom,gpio-req-tbl-num = <0 1 2 3 4>;
+		qcom,gpio-req-tbl-flags = <1 0 0 0 0>;
 		qcom,gpio-req-tbl-label = "CAMIF_MCLK",
 			"CAM_RESET1",
-			"CAM_STANDBY";
-		qcom,csi-lane-assign = <0xe4>;
-		qcom,csi-lane-mask = <0x3>;
+			"CAM_STANDBY",
+			"CAM_VANA",
+			"CAM_VDIG";
+		qcom,csi-lane-assign = <0x4320>;
+		qcom,csi-lane-mask = <0x7>;
 		qcom,sensor-position = <0>;
 		qcom,sensor-mode = <1>;
 		qcom,sensor-type = <0>;
 		qcom,cci-master = <0>;
 	};
+
+	/*c230w front camera - 2013/10/28 */
 	qcom,camera@78 {
 		compatible = "shinetech,gc0339";
 		reg = <0x78>;
@@ -65,7 +72,7 @@
 		qcom,csiphy-sd-index = <1>;
 		qcom,csid-sd-index = <1>;
 		qcom,mount-angle = <270>;
-		qcom,sensor-name = "skuab_shinetech_gc0339";
+		qcom,sensor-name = "gc0339_c230w";
 		cam_vdig-supply = <&pm8110_l14>;
 		cam_vana-supply = <&pm8110_l19>;
 		cam_vio-supply = <&pm8110_l14>;
@@ -76,15 +83,18 @@
 		qcom,cam-vreg-op-mode = <200000 0 80000>;
 		qcom,gpio-no-mux = <0>;
 		gpios = <&msmgpio 14 0>,
-				<&msmgpio 15 0>,
-				<&msmgpio 85 0>;
-		qcom,gpio-reset = <1>;
-		qcom,gpio-standby = <2>;
-		qcom,gpio-req-tbl-num = <0 1 2>;
-		qcom,gpio-req-tbl-flags = <1 0 0>;
+				<&msmgpio 85 0>,
+				<&msmgpio 70 0>,
+				<&msmgpio 71 0>;
+		qcom,gpio-standby = <1>;
+		qcom,gpio-vana = <2>;
+		qcom,gpio-vdig = <3>;
+		qcom,gpio-req-tbl-num = <0 1 2 3>;
+		qcom,gpio-req-tbl-flags = <1 0 0 0>;
 		qcom,gpio-req-tbl-label = "CAMIF_MCLK",
-				"CAM_RESET",
-				"CAM_STANDBY";
+				"CAM_STANDBY",
+				"CAM_VANA",
+				"CAM_VDIG";
 		qcom,gpio-set-tbl-num = <1 1>;
 		qcom,gpio-set-tbl-flags = <0 2>;
 		qcom,gpio-set-tbl-delay = <1000 4000>;

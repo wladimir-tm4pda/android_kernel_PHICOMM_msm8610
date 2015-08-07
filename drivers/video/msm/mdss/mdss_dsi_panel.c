@@ -137,11 +137,6 @@ static void mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
 	cmdreq.cmds = pcmds->cmds;
 	cmdreq.cmds_cnt = pcmds->cmd_cnt;
 	cmdreq.flags = CMD_REQ_COMMIT;
-
-	/*Panel ON/Off commands should be sent in DSI Low Power Mode*/
-	if (pcmds->link_state == DSI_LP_MODE)
-		cmdreq.flags  |= CMD_REQ_LP_MODE;
-
 	cmdreq.rlen = 0;
 	cmdreq.cb = NULL;
 
@@ -170,6 +165,62 @@ static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 	cmdreq.cb = NULL;
 
 	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+}
+
+#define BL_LEVEL	33
+static int prev_bl = 33;
+spinlock_t set_backlight_spin_lock;
+static void mdss_dsi_panel_bklt_gpio(struct mdss_dsi_ctrl_pdata *ctrl, int level)
+{
+	unsigned long flags;
+	int step = 0, i =0;
+
+	level = 33 - level;
+	if (level > prev_bl) {
+		step = level - prev_bl;
+		if (level == 33) {
+			step--;
+		}
+	} else if (level < prev_bl) {
+		step = level + 32 - prev_bl;
+	} else if(level == BL_LEVEL) {
+		gpio_set_value(GPIO_LCD_BACKLIGHT_EN, 0);
+		prev_bl = level;
+		return;	
+	} else {
+		pr_debug("%s: no change\n", __func__);
+		return;
+	}
+
+	if (prev_bl == 33)
+		mdelay(50);		//turn on backlight, delay 50ms
+	if(!spin_trylock_irqsave(&set_backlight_spin_lock, flags)){//disable local irq and preemption
+		return;
+	}
+
+	if (level == 33) {
+		gpio_set_value(GPIO_LCD_BACKLIGHT_EN, 0);
+		prev_bl = level;
+		spin_unlock_irqrestore(&set_backlight_spin_lock, flags);
+		return;
+	} else if (prev_bl == 33) {
+		gpio_set_value(GPIO_LCD_BACKLIGHT_EN, 1);
+		udelay(4);
+	}
+	prev_bl = level;
+
+	for(i = 0; i < step; i++)
+	{
+		gpio_set_value(GPIO_LCD_BACKLIGHT_EN, 0);
+		udelay(4);
+		gpio_set_value(GPIO_LCD_BACKLIGHT_EN, 1);
+		udelay(4);
+	}
+	mdelay(4);
+
+	spin_unlock_irqrestore(&set_backlight_spin_lock, flags);
+
+	return;
 }
 
 void mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
@@ -317,6 +368,9 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 	case BL_DCS_CMD:
 		mdss_dsi_panel_bklt_dcs(ctrl_pdata, bl_level);
 		break;
+	case BL_GPIO:
+		mdss_dsi_panel_bklt_gpio(ctrl_pdata, bl_level);
+		break;
 	default:
 		pr_err("%s: Unknown bl_ctrl configuration\n",
 			__func__);
@@ -369,49 +423,6 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 
 	pr_debug("%s:-\n", __func__);
 	return 0;
-}
-
-static void mdss_dsi_parse_lane_swap(struct device_node *np, char *dlane_swap)
-{
-	const char *data;
-
-	*dlane_swap = DSI_LANE_MAP_0123;
-	data = of_get_property(np, "qcom,mdss-dsi-lane-map", NULL);
-	if (data) {
-		if (!strcmp(data, "lane_map_3012"))
-			*dlane_swap = DSI_LANE_MAP_3012;
-		else if (!strcmp(data, "lane_map_2301"))
-			*dlane_swap = DSI_LANE_MAP_2301;
-		else if (!strcmp(data, "lane_map_1230"))
-			*dlane_swap = DSI_LANE_MAP_1230;
-		else if (!strcmp(data, "lane_map_0321"))
-			*dlane_swap = DSI_LANE_MAP_0321;
-		else if (!strcmp(data, "lane_map_1032"))
-			*dlane_swap = DSI_LANE_MAP_1032;
-		else if (!strcmp(data, "lane_map_2103"))
-			*dlane_swap = DSI_LANE_MAP_2103;
-		else if (!strcmp(data, "lane_map_3210"))
-			*dlane_swap = DSI_LANE_MAP_3210;
-	}
-}
-
-static void mdss_dsi_parse_trigger(struct device_node *np, char *trigger,
-		char *trigger_key)
-{
-	const char *data;
-
-	*trigger = DSI_CMD_TRIGGER_SW;
-	data = of_get_property(np, trigger_key, NULL);
-	if (data) {
-		if (!strcmp(data, "none"))
-			*trigger = DSI_CMD_TRIGGER_NONE;
-		else if (!strcmp(data, "trigger_te"))
-			*trigger = DSI_CMD_TRIGGER_TE;
-		else if (!strcmp(data, "trigger_sw_seof"))
-			*trigger = DSI_CMD_TRIGGER_SW_SEOF;
-		else if (!strcmp(data, "trigger_sw_te"))
-			*trigger = DSI_CMD_TRIGGER_SW_TE;
-	}
 }
 
 
@@ -483,7 +494,7 @@ static int mdss_dsi_parse_dcs_cmds(struct device_node *np,
 	}
 
 	data = of_get_property(np, link_key, NULL);
-	if (data && !strcmp(data, "dsi_hs_mode"))
+	if (!strncmp(data, "dsi_hs_mode", 11))
 		pcmds->link_state = DSI_HS_MODE;
 	else
 		pcmds->link_state = DSI_LP_MODE;
@@ -703,10 +714,8 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	data = of_get_property(np, "qcom,mdss-dsi-panel-type", NULL);
 	if (data && !strncmp(data, "dsi_cmd_mode", 12))
 		pinfo->mipi.mode = DSI_CMD_MODE;
-	tmp = 0;
-	data = of_get_property(np, "qcom,mdss-dsi-pixel-packing", NULL);
-	if (data && !strcmp(data, "loose"))
-		tmp = 1;
+	rc = of_property_read_u32(np, "qcom,mdss-dsi-pixel-packing", &tmp);
+	tmp = (!rc ? tmp : 0);
 	rc = mdss_panel_dt_get_dst_fmt(pinfo->bpp,
 		pinfo->mipi.mode, tmp,
 		&(pinfo->mipi.dst_format));
@@ -719,23 +728,18 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	pdest = of_get_property(np,
 		"qcom,mdss-dsi-panel-destination", NULL);
 
-	if (pdest) {
-		if (strlen(pdest) != 9) {
-			pr_err("%s: Unknown pdest specified\n", __func__);
-			return -EINVAL;
-		}
-		if (!strcmp(pdest, "display_1"))
-			pinfo->pdest = DISPLAY_1;
-		else if (!strcmp(pdest, "display_2"))
-			pinfo->pdest = DISPLAY_2;
-		else {
-			pr_debug("%s: pdest not specified. Set Default\n",
-								__func__);
-			pinfo->pdest = DISPLAY_1;
-		}
-	} else {
-		pr_err("%s: pdest not specified\n", __func__);
+	if (strlen(pdest) != 9) {
+		pr_err("%s: Unknown pdest specified\n", __func__);
 		return -EINVAL;
+	}
+	if (!strncmp(pdest, "display_1", 9))
+		pinfo->pdest = DISPLAY_1;
+	else if (!strncmp(pdest, "display_2", 9))
+		pinfo->pdest = DISPLAY_2;
+	else {
+		pr_debug("%s: pdest not specified. Set Default\n",
+							__func__);
+		pinfo->pdest = DISPLAY_1;
 	}
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-h-front-porch", &tmp);
 	pinfo->lcdc.h_front_porch = (!rc ? tmp : 6);
@@ -787,6 +791,8 @@ static int mdss_panel_parse_dt(struct device_node *np,
 			tmp = of_get_named_gpio(np,
 				"qcom,mdss-dsi-pwm-gpio", 0);
 			ctrl_pdata->pwm_pmic_gpio = tmp;
+		} else if (!strncmp(data, "bl_ctrl_gpio", 12)) {
+			ctrl_pdata->bklt_ctrl = BL_GPIO;
 		} else if (!strncmp(data, "bl_ctrl_dcs", 11)) {
 			ctrl_pdata->bklt_ctrl = BL_DCS_CMD;
 		}
@@ -819,14 +825,10 @@ static int mdss_panel_parse_dt(struct device_node *np,
 		"qcom,mdss-dsi-bllp-power-mode");
 	pinfo->mipi.eof_bllp_power_stop = of_property_read_bool(
 		np, "qcom,mdss-dsi-bllp-eof-power-mode");
-	pinfo->mipi.traffic_mode = DSI_NON_BURST_SYNCH_PULSE;
-	data = of_get_property(np, "qcom,mdss-dsi-traffic-mode", NULL);
-	if (data) {
-		if (!strcmp(data, "non_burst_sync_event"))
-			pinfo->mipi.traffic_mode = DSI_NON_BURST_SYNCH_EVENT;
-		else if (!strcmp(data, "burst_mode"))
-			pinfo->mipi.traffic_mode = DSI_BURST_MODE;
-	}
+	rc = of_property_read_u32(np,
+		"qcom,mdss-dsi-traffic-mode", &tmp);
+	pinfo->mipi.traffic_mode =
+			(!rc ? tmp : DSI_NON_BURST_SYNCH_PULSE);
 	rc = of_property_read_u32(np,
 		"qcom,mdss-dsi-te-dcs-command", &tmp);
 	pinfo->mipi.insert_dcs_cmd =
@@ -845,20 +847,8 @@ static int mdss_panel_parse_dt(struct device_node *np,
 			(!rc ? tmp : 1);
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-virtual-channel-id", &tmp);
 	pinfo->mipi.vc = (!rc ? tmp : 0);
-	pinfo->mipi.rgb_swap = DSI_RGB_SWAP_RGB;
-	data = of_get_property(np, "mdss-dsi-color-order", NULL);
-	if (data) {
-		if (!strcmp(data, "rgb_swap_rbg"))
-			pinfo->mipi.rgb_swap = DSI_RGB_SWAP_RBG;
-		else if (!strcmp(data, "rgb_swap_bgr"))
-			pinfo->mipi.rgb_swap = DSI_RGB_SWAP_BGR;
-		else if (!strcmp(data, "rgb_swap_brg"))
-			pinfo->mipi.rgb_swap = DSI_RGB_SWAP_BRG;
-		else if (!strcmp(data, "rgb_swap_grb"))
-			pinfo->mipi.rgb_swap = DSI_RGB_SWAP_GRB;
-		else if (!strcmp(data, "rgb_swap_gbr"))
-			pinfo->mipi.rgb_swap = DSI_RGB_SWAP_GBR;
-	}
+	rc = of_property_read_u32(np, "qcom,mdss-dsi-color-order", &tmp);
+	pinfo->mipi.rgb_swap = (!rc ? tmp : DSI_RGB_SWAP_RGB);
 	pinfo->mipi.data_lane0 = of_property_read_bool(np,
 		"qcom,mdss-dsi-lane-0-state");
 	pinfo->mipi.data_lane1 = of_property_read_bool(np,
@@ -868,6 +858,9 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	pinfo->mipi.data_lane3 = of_property_read_bool(np,
 		"qcom,mdss-dsi-lane-3-state");
 
+	rc = of_property_read_u32(np, "qcom,mdss-dsi-lane-map", &tmp);
+	pinfo->mipi.dlane_swap = (!rc ? tmp : 0);
+
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-t-clk-pre", &tmp);
 	pinfo->mipi.t_clk_pre = (!rc ? tmp : 0x24);
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-t-clk-post", &tmp);
@@ -876,7 +869,26 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-stream", &tmp);
 	pinfo->mipi.stream = (!rc ? tmp : 0);
 
-	data = of_get_property(np, "qcom,mdss-dsi-panel-mode-gpio-state", NULL);
+	rc = of_property_read_u32(np, "qcom,mdss-dsi-mdp-trigger", &tmp);
+	pinfo->mipi.mdp_trigger =
+			(!rc ? tmp : DSI_CMD_TRIGGER_SW);
+	if (pinfo->mipi.mdp_trigger > 6) {
+		pr_err("%s:%d, Invalid mdp trigger. Forcing to sw trigger",
+						 __func__, __LINE__);
+		pinfo->mipi.mdp_trigger =
+					DSI_CMD_TRIGGER_SW;
+	}
+
+	rc = of_property_read_u32(np, "qcom,mdss-dsi-dma-trigger", &tmp);
+	pinfo->mipi.dma_trigger =
+			(!rc ? tmp : DSI_CMD_TRIGGER_SW);
+	if (pinfo->mipi.dma_trigger > 6) {
+		pr_err("%s:%d, Invalid dma trigger. Forcing to sw trigger",
+						 __func__, __LINE__);
+		pinfo->mipi.dma_trigger =
+					DSI_CMD_TRIGGER_SW;
+	}
+	data = of_get_property(np, "qcom,mdss-dsi-panel-mode-gpio-state", &tmp);
 	if (data) {
 		if (!strcmp(data, "high"))
 			pinfo->mode_gpio_state = MODE_GPIO_HIGH;
@@ -886,9 +898,9 @@ static int mdss_panel_parse_dt(struct device_node *np,
 		pinfo->mode_gpio_state = MODE_GPIO_NOT_VALID;
 	}
 
-	rc = of_property_read_u32(np, "qcom,mdss-dsi-panel-framerate", &tmp);
+	rc = of_property_read_u32(np, "qcom,mdss-dsi-panel-frame-rate", &tmp);
 	pinfo->mipi.frame_rate = (!rc ? tmp : 60);
-	rc = of_property_read_u32(np, "qcom,mdss-dsi-panel-clockrate", &tmp);
+	rc = of_property_read_u32(np, "qcom,mdss-dsi-panel-clock-rate", &tmp);
 	pinfo->clk_rate = (!rc ? tmp : 0);
 	data = of_get_property(np, "qcom,mdss-dsi-panel-timings", &len);
 	if ((!data) || (len != 12)) {
@@ -899,20 +911,7 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	for (i = 0; i < len; i++)
 		pinfo->mipi.dsi_phy_db.timing[i] = data[i];
 
-	pinfo->mipi.lp11_init = of_property_read_bool(np,
-					"qcom,mdss-dsi-lp11-init");
-	rc = of_property_read_u32(np, "qcom,mdss-dsi-init-delay-us", &tmp);
-	pinfo->mipi.init_delay = (!rc ? tmp : 0);
-
 	mdss_dsi_parse_fbc_params(np, pinfo);
-
-	mdss_dsi_parse_trigger(np, &(pinfo->mipi.mdp_trigger),
-		"qcom,mdss-dsi-mdp-trigger");
-
-	mdss_dsi_parse_trigger(np, &(pinfo->mipi.dma_trigger),
-		"qcom,mdss-dsi-dma-trigger");
-
-	mdss_dsi_parse_lane_swap(np, &(pinfo->mipi.dlane_swap));
 
 	mdss_dsi_parse_reset_seq(np, pinfo->rst_seq, &(pinfo->rst_seq_len),
 		"qcom,mdss-dsi-reset-sequence");
@@ -985,9 +984,13 @@ int mdss_dsi_panel_init(struct device_node *node,
 		ctrl_pdata->partial_update_fnc = NULL;
 	}
 
+	spin_lock_init(&set_backlight_spin_lock);
+
 	ctrl_pdata->on = mdss_dsi_panel_on;
 	ctrl_pdata->off = mdss_dsi_panel_off;
 	ctrl_pdata->panel_data.set_backlight = mdss_dsi_panel_bl_ctrl;
+
+	strncpy(ctrl_pdata->panel_data.panel_info.panel_name, panel_name, 32);
 
 	return 0;
 }

@@ -239,8 +239,6 @@
 		qcom,hsusb-otg-otg-control = <2>;
 		qcom,hsusb-otg-disable-reset;
 		qcom,dp-manual-pullup;
-		qcom,ahb-async-bridge-bypass;
-		qcom,disable-retention-with-vdd-min;
 
 		qcom,msm-bus,name = "usb2";
 		qcom,msm-bus,num-cases = <2>;
@@ -256,6 +254,8 @@
 		reg = <0xfe8050c8 0xc8>;
 		qcom,android-usb-swfi-latency = <1>;
 		qcom,streaming-func = "rndis";
+        	qcom,android-usb-internal-ums;
+        	qcom,android-usb-cdrom;
 	};
 
 	rmtfs_sharedmem {
@@ -451,9 +451,7 @@
 
 	qcom,msm-mem-hole {
 		compatible = "qcom,msm-mem-hole";
-		qcom,memblock-remove = <0x0a400000 0x3100000
-					0x0d900000 0x100000
-					0x0db00000 0x200000>; /* Address and Size of Hole */
+		qcom,memblock-remove = <0x08800000 0x5600000>; /* Address and Size of Hole */
 	};
 
 	qcom,wdt@f9017000 {
@@ -495,7 +493,7 @@
 		reg = <0xf9923000 0x1000>;
 		interrupt-names = "qup_err_intr";
 		interrupts = <0 95 0>;
-		qcom,i2c-bus-freq = <100000>;
+		qcom,i2c-bus-freq = <400000>;
 		qcom,i2c-src-freq = <19200000>;
 		qcom,sda-gpio = <&msmgpio 2 0>;
 		qcom,scl-gpio = <&msmgpio 3 0>;
@@ -532,24 +530,7 @@
                 qcom,master-id = <86>;
 	};
 
-
-	i2c@f9924000 { /* BLSP-1 QUP-3 */
-		cell-index = <2>;
-		compatible = "qcom,i2c-qup";
-		#address-cells = <1>;
-		#size-cells = <0>;
-		reg-names = "qup_phys_addr";
-		reg = <0xf9924000 0x1000>;
-		interrupt-names = "qup_err_intr";
-		interrupts = <0 96 0>;
-		qcom,i2c-bus-freq = <100000>;
-		qcom,i2c-src-freq = <19200000>;
-		qcom,sda-gpio = <&msmgpio 8 0>;
-		qcom,scl-gpio = <&msmgpio 9 0>;
-		qcom,master-id = <86>;
-	};
-
-	i2c@f9925000 { /* BLSP-1 QUP-3 */
+	i2c@f9925000 { /*BLSP-1 QUP-3*/
 		cell-index = <0>;
 		compatible = "qcom,i2c-qup";
 		#address-cells = <1>;
@@ -563,6 +544,51 @@
                 qcom,sda-gpio = <&msmgpio 10 0>;
                 qcom,scl-gpio = <&msmgpio 11 0>;
                 qcom,master-id = <86>;
+
+	 kionix@0x0f{
+		 compatible = "kionix,kxtj9";
+		 reg = <0x0f>;
+		 interrupt-parent = <&msmgpio>;
+		 interrupts = <81 0x2>;
+		 vdd-supply = <&pm8110_l19>;
+		 vio-supply = <&pm8110_l14>;
+		 kionix,min-interval = <5>;
+		 kionix,init-interval = <200>;
+		 kionix,axis-map-x = <1>;
+		 kionix,axis-map-y = <0>;
+		 kionix,axis-map-z = <2>;
+		 kionix,g-range = <2>;
+		 kionix,negate-x;
+		 kionix,negate-y;
+		 kionix,negate-z;
+		 kionix,res-12bit;
+            };
+
+	    tmd2772x@39 {
+		 compatible = "TMD2772X,tmd2772x";
+		 reg = <0x39>;
+		 interrupt-parent = <&msmgpio>;
+	         interrupts = <80 0x2>;
+		 vdd-supply = <&pm8110_l19>;
+		 vio-supply = <&pm8110_l14>;
+		 taos,interrupt-gpio = <&msmgpio 80 0x2>;
+                 };
+
+        akm8963@0x0d {
+		    compatible = "akm8963";
+		    reg = <0x0d>;
+		    interrupt-parent = <&msmgpio>;
+	        interrupts = <83 0x2>;
+		    vdd-supply = <&pm8110_l19>;
+		    vio-supply = <&pm8110_l14>;
+		    akm,interrupt-gpio = <&msmgpio 83 0x2>;
+        };
+	    bma222@18 {
+		compatible = "BMA222,bma222";
+		vdd-supply = <&pm8110_l19>;
+		vio-supply = <&pm8110_l14>;
+		reg = <0x18>;
+               };
 	};
 
 	spi_4: spi@f9926000 { /* BLSP1 QUP4 */
@@ -647,7 +673,6 @@
 
 	qcom,msm-pcm-voice {
 		compatible = "qcom,msm-pcm-voice";
-		qcom,memory-constraint;
 	};
 
 	qcom,msm-stub-codec {
@@ -867,9 +892,9 @@
 		interrupts = <0 29 1>;
 	};
 
-	qcom,qseecom@d480000 {
+	qcom,qseecom@da00000 {
 		compatible = "qcom,qseecom";
-		reg = <0xd480000 0x80000>;
+		reg = <0xda00000 0x100000>;
 		reg-names = "secapp-region";
 		qcom,disk-encrypt-pipe-pair = <2>;
 		qcom,hlos-ce-hw-instance = <0>;

@@ -160,7 +160,7 @@
 #define OCP_THR_900_MA			0x02
 #define OCP_THR_500_MA			0x01
 #define OCP_THR_200_MA			0x00
-
+#define USB_UVD_MASK            0x0c
 /* Interrupt definitions */
 /* smbb_chg_interrupts */
 #define CHG_DONE_IRQ			BIT(7)
@@ -361,6 +361,8 @@ struct qpnp_chg_chip {
 	struct work_struct		soc_check_work;
 	struct delayed_work		aicl_check_work;
 	struct work_struct		insertion_ocv_work;
+	struct delayed_work             battery_work;
+    struct delayed_work     vbus_poll_work;
 	struct qpnp_chg_regulator	otg_vreg;
 	struct qpnp_chg_regulator	boost_vreg;
 	struct qpnp_chg_regulator	batfet_vreg;
@@ -376,6 +378,7 @@ struct qpnp_chg_chip {
 	struct work_struct		reduce_power_stage_work;
 	bool				power_stage_workaround_running;
 	bool				power_stage_workaround_enable;
+	unsigned int              usb_uvd_thr; //USB under voltage detection threshold.
 };
 
 
@@ -1494,6 +1497,7 @@ qpnp_chg_usb_usbin_valid_irq_handler(int irq, void *_chip)
 		}
 
 		power_supply_set_present(chip->usb_psy, chip->usb_present);
+		power_supply_set_online(chip->usb_psy, chip->usb_present);
 		schedule_work(&chip->batfet_lcl_work);
 	}
 
@@ -1922,6 +1926,9 @@ get_prop_batt_present(struct qpnp_chg_chip *chip)
 	return (batt_present & BATT_PRES_BIT) ? 1 : 0;
 }
 
+static int
+get_prop_batt_temp(struct qpnp_chg_chip *chip);
+
 #define BATT_TEMP_HOT	BIT(6)
 #define BATT_TEMP_OK	BIT(7)
 static int
@@ -1939,8 +1946,17 @@ get_prop_batt_health(struct qpnp_chg_chip *chip)
 
 	if (BATT_TEMP_OK & batt_health)
 		return POWER_SUPPLY_HEALTH_GOOD;
-	if (BATT_TEMP_HOT & batt_health)
-		return POWER_SUPPLY_HEALTH_OVERHEAT;
+	if (BATT_TEMP_HOT & batt_health) {
+	    int temp = get_prop_batt_temp(chip);
+	    printk("Temperature is %d \n", temp);
+	    if (temp >= 600)    //600 means 60 degree
+	    {
+	        printk("Temperature is %d , battery OverHeat!!!\n", temp);
+	        return POWER_SUPPLY_HEALTH_OVERHEAT;
+	    }
+	    else
+	        return POWER_SUPPLY_HEALTH_GOOD;
+	}
 	else
 		return POWER_SUPPLY_HEALTH_COLD;
 }
@@ -2184,8 +2200,7 @@ qpnp_batt_external_power_changed(struct power_supply *psy)
 					&& (charger_monitor ||
 					!chip->charger_monitor_checked)) {
 				if (!ext_ovp_present)
-					qpnp_chg_iusbmax_set(chip,
-						USB_WALL_THRESHOLD_MA);
+					qpnp_chg_iusbmax_set(chip, ret.intval / 1000);
 				else
 					qpnp_chg_iusbmax_set(chip,
 						OVP_USB_WALL_THRESHOLD_MA);
@@ -2209,6 +2224,37 @@ skip_set_iusb_max:
 	pr_debug("end of power supply changed\n");
 	pr_debug("psy changed batt_psy\n");
 	power_supply_changed(&chip->batt_psy);
+}
+
+static void battery_work(struct work_struct *bat)
+{
+        struct qpnp_chg_chip *chip = container_of(bat, struct qpnp_chg_chip, battery_work.work);
+
+        qpnp_batt_external_power_changed(&chip->batt_psy);
+
+	if (!chip->bms_psy)
+	{
+		schedule_delayed_work(&chip->battery_work, msecs_to_jiffies(100));
+	}
+	else
+	{
+		schedule_delayed_work(&chip->battery_work, msecs_to_jiffies(1000));
+	}
+}
+
+static void vbus_poll_work(struct work_struct *vbus_poll)
+{
+    struct qpnp_chg_chip *chip = container_of(vbus_poll, struct qpnp_chg_chip, vbus_poll_work.work);
+    bool usb_present = qpnp_chg_is_usb_chg_plugged_in(chip);
+
+    if(chip->usb_present ^ usb_present){
+        chip->usb_present = usb_present;
+        if(chip->usb_present == false){
+            power_supply_set_present(chip->usb_psy, false);
+        }
+    }
+
+    schedule_delayed_work(&chip->vbus_poll_work, msecs_to_jiffies(2000));
 }
 
 static int
@@ -4165,8 +4211,8 @@ qpnp_chg_hwinit(struct qpnp_chg_chip *chip, u8 subtype,
 
 		rc = qpnp_chg_masked_write(chip,
 			chip->usb_chgpth_base + USB_OVP_CTL,
-			USB_VALID_DEB_20MS,
-			USB_VALID_DEB_20MS, 1);
+			USB_VALID_DEB_20MS | USB_UVD_MASK,
+			USB_VALID_DEB_20MS | (u8)chip->usb_uvd_thr << 2, 1);
 
 		rc = qpnp_chg_masked_write(chip,
 			chip->usb_chgpth_base + CHGR_USB_ENUM_T_STOP,
@@ -4303,6 +4349,7 @@ qpnp_charger_read_dt_props(struct qpnp_chg_chip *chip)
 	OF_PROP_READ(chip, soc_resume_limit, "resume-soc", rc, 1);
 	OF_PROP_READ(chip, batt_weak_voltage_mv, "vbatweak-mv", rc, 1);
 
+	OF_PROP_READ(chip, usb_uvd_thr, "usb_uvd_thr", rc, 1);
 	if (rc)
 		return rc;
 
@@ -4413,6 +4460,7 @@ qpnp_charger_probe(struct spmi_device *spmi)
 	struct resource *resource;
 	struct spmi_resource *spmi_resource;
 	int rc = 0;
+	union power_supply_propval ret = {0,};
 
 	chip = devm_kzalloc(&spmi->dev,
 			sizeof(struct qpnp_chg_chip), GFP_KERNEL);
@@ -4646,8 +4694,10 @@ qpnp_charger_probe(struct spmi_device *spmi)
 		chip->batt_psy.set_property = qpnp_batt_power_set_property;
 		chip->batt_psy.property_is_writeable =
 				qpnp_batt_property_is_writeable;
+#if 0
 		chip->batt_psy.external_power_changed =
 				qpnp_batt_external_power_changed;
+#endif
 		chip->batt_psy.supplied_to = pm_batt_supplied_to;
 		chip->batt_psy.num_supplicants =
 				ARRAY_SIZE(pm_batt_supplied_to);
@@ -4669,6 +4719,8 @@ qpnp_charger_probe(struct spmi_device *spmi)
 			qpnp_usbin_health_check_work);
 	INIT_WORK(&chip->soc_check_work, qpnp_chg_soc_check_work);
 	INIT_DELAYED_WORK(&chip->aicl_check_work, qpnp_aicl_check_work);
+	INIT_DELAYED_WORK(&chip->battery_work, battery_work);
+    INIT_DELAYED_WORK(&chip->vbus_poll_work, vbus_poll_work);
 
 	if (chip->dc_chgpth_base) {
 		chip->dc_psy.name = "qpnp-dc";
@@ -4740,6 +4792,10 @@ qpnp_charger_probe(struct spmi_device *spmi)
 		goto unregister_dc_psy;
 	}
 
+	/* Init global variable usb_present from power supply state machine. */
+	chip->usb_psy->get_property(chip->usb_psy, POWER_SUPPLY_PROP_ONLINE, &ret);
+	chip->usb_present = ret.intval;
+
 	qpnp_chg_usb_chg_gone_irq_handler(chip->chg_gone.irq, chip);
 	qpnp_chg_usb_usbin_valid_irq_handler(chip->usbin_valid.irq, chip);
 	qpnp_chg_dc_dcin_valid_irq_handler(chip->dcin_valid.irq, chip);
@@ -4760,6 +4816,10 @@ qpnp_charger_probe(struct spmi_device *spmi)
 			qpnp_chg_is_dc_chg_plugged_in(chip),
 			get_prop_batt_present(chip),
 			get_prop_batt_health(chip));
+
+	schedule_delayed_work(&chip->battery_work, msecs_to_jiffies(100));
+	schedule_delayed_work(&chip->vbus_poll_work, msecs_to_jiffies(2000));
+
 	return 0;
 
 unregister_dc_psy:
@@ -4784,6 +4844,8 @@ qpnp_charger_remove(struct spmi_device *spmi)
 							&chip->adc_param);
 	}
 
+    cancel_delayed_work_sync(&chip->vbus_poll_work);
+	cancel_delayed_work_sync(&chip->battery_work);
 	cancel_delayed_work_sync(&chip->aicl_check_work);
 	power_supply_unregister(&chip->dc_psy);
 	cancel_work_sync(&chip->soc_check_work);
@@ -4821,6 +4883,9 @@ static int qpnp_chg_resume(struct device *dev)
 			pr_debug("failed to force on VREF_BAT_THM rc=%d\n", rc);
 	}
 
+	schedule_delayed_work(&chip->battery_work, msecs_to_jiffies(100));
+    schedule_delayed_work(&chip->vbus_poll_work, msecs_to_jiffies(2000));
+
 	return rc;
 }
 
@@ -4828,6 +4893,9 @@ static int qpnp_chg_suspend(struct device *dev)
 {
 	struct qpnp_chg_chip *chip = dev_get_drvdata(dev);
 	int rc = 0;
+
+    cancel_delayed_work_sync(&chip->vbus_poll_work);
+	cancel_delayed_work_sync(&chip->battery_work);
 
 	if (chip->bat_if_base) {
 		rc = qpnp_chg_masked_write(chip,

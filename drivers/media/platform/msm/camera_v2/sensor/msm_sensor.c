@@ -1169,7 +1169,11 @@ int32_t msm_sensor_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 			}
 			gpio_set_value_cansleep(
 				data->gpio_conf->gpio_num_info->gpio_num
-				[power_setting->seq_val], GPIOF_OUT_INIT_LOW);
+#if defined(CONFIG_PHICOMM_BOARD_C230W) || defined(CONFIG_PHICOMM_BOARD_C230WJA)
+				[power_setting->seq_val], power_setting->config_val); /*modify by jun.wu*/
+#else
+				[power_setting->seq_val], GPIOF_OUT_INIT_LOW); 
+#endif
 			break;
 		case SENSOR_VREG:
 			if (power_setting->seq_val >= CAM_VREG_MAX) {
@@ -1220,7 +1224,7 @@ int32_t msm_sensor_match_id(struct msm_sensor_ctrl_t *s_ctrl)
 		return rc;
 	}
 
-	CDBG("%s: read id: %x expected id %x:\n", __func__, chipid,
+	printk("%s: read id: %x expected id %x:\n", __func__, chipid,
 		s_ctrl->sensordata->slave_info->sensor_id);
 	if (chipid != s_ctrl->sensordata->slave_info->sensor_id) {
 		pr_err("msm_sensor_match_id chip id doesnot match\n");

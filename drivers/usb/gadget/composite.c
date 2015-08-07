@@ -1075,6 +1075,151 @@ static void composite_setup_complete(struct usb_ep *ep, struct usb_request *req)
 				req->status, req->actual, req->length);
 }
 
+static unsigned char ms_os_string_descriptor[18] = {
+	0x12,					//bLength
+	0x03,					//bDescriptorType
+	0x4D, 0x00, 				//qwSignature, "MSFT100"
+	0x53, 0x00, 	
+	0x46, 0x00, 
+	0x54, 0x00, 
+	0x31, 0x00, 
+	0x30, 0x00, 
+	0x30, 0x00,				
+	0x42,					//bMS_VendorCode
+	0x01,					//Pad field
+};
+
+struct ms_compat_id_header usb_compat_id_header = {
+	//.dwLength = 0x00000040,
+	.bcdVersion = __constant_cpu_to_le16(0x0100),
+	.wIndex = __constant_cpu_to_le16(0x0004),
+	//.bcount = 2,
+	.pad = {0},
+};
+
+static struct usb_configuration *get_usb_config(struct usb_gadget * gadget, int bConfigurationValue)
+{
+	struct usb_composite_dev *cdev = get_gadget_data(gadget);
+	struct usb_configuration *c = NULL;
+
+	list_for_each_entry(c, &cdev->configs, list) {
+		if(c->bConfigurationValue == bConfigurationValue){
+			break;
+		}
+	}
+	return c;
+}
+
+static int ms_compat_id(struct usb_gadget *gadget)
+{
+	struct usb_composite_dev	*cdev = get_gadget_data(gadget);
+	void *buf = cdev->req->buf;
+	struct ms_compat_id_header *h = (struct ms_compat_id_header *)buf;
+	struct usb_configuration *config = get_usb_config(gadget, 1 /* hardcode */);
+	struct usb_function		*f;	
+	struct ms_compat_id_function  *usb_compat_id_function;
+	
+	int usb_compat_id_header_size = sizeof(struct ms_compat_id_header);
+	int usb_compat_id_function_size = sizeof(struct ms_compat_id_function);
+	void				*next = buf + usb_compat_id_header_size;	
+	int interface_nums = 0;
+	bool mtp = false;
+	int len = 0;
+
+	if(NULL == config){
+		return -EOPNOTSUPP;
+	}
+	
+	memcpy(buf, &usb_compat_id_header, usb_compat_id_header_size);				
+	interface_nums = 0;
+	
+	list_for_each_entry(f, &config->functions, list) {		
+		usb_compat_id_function = f->usb_compat_id_function;
+		interface_nums++;
+		
+		if (!usb_compat_id_function){
+			continue;
+		}
+		
+		if(0 == strncmp(f->name, "mtp", 3)){
+			mtp = true;
+		}
+		memcpy(next, usb_compat_id_function, usb_compat_id_function_size);				
+		next += usb_compat_id_function_size;
+	}
+	
+	if((mtp == true) && (interface_nums <=2)){
+		len = next - buf;
+		h->dwLength = cpu_to_le32(len);
+		h->bCount = interface_nums;
+		return len;
+	}
+
+	return -EOPNOTSUPP;
+}
+
+static int ms_extend_property(struct usb_gadget *gadget, int interfacenum)
+{
+	struct usb_configuration *config = get_usb_config(gadget, 1 /* hardcode */);
+	struct usb_function		*f;	
+	struct usb_descriptor_header **descriptors;
+	struct usb_interface_descriptor *iface;
+
+	if(NULL == config){
+		return -EOPNOTSUPP;
+	}
+	
+	list_for_each_entry(f, &config->functions, list) {	
+		//Just only get a interfaceNum
+		descriptors = f->hs_descriptors;
+		if(NULL == descriptors){
+			continue;
+		}
+		iface = (struct usb_interface_descriptor *)descriptors[0];
+		if((iface != NULL) && (iface->bInterfaceNumber == interfacenum)){
+			//TODO:Windows 8
+			return -EOPNOTSUPP;
+		}
+	}		
+	
+	return -EOPNOTSUPP;
+}
+
+static bool is_supported_ms_os_string(struct usb_gadget *gadget)
+{
+	struct usb_configuration *config = get_usb_config(gadget, 1 /* hardcode */);
+	struct usb_function		*f;	
+	struct usb_descriptor_header **descriptors;
+	struct usb_interface_descriptor *iface;
+	int i = 0;
+	
+	if(NULL == config){		
+		return false;
+	}
+
+	for (i = 0; i < MAX_CONFIG_INTERFACES; i++) {
+		f = config->interface[i];
+		if (!f){
+			continue;
+		}
+		
+		if(0 == strncmp(f->name, "mtp", 3)){
+			descriptors = f->hs_descriptors;
+			if(NULL == descriptors){				
+				return true;
+			}
+			iface = (struct usb_interface_descriptor *)descriptors[0];
+			if((iface != NULL) && (iface->bInterfaceClass = 0xff)){	
+				return true;
+			}			
+			/* "ptp" */
+			return false;
+		}
+	}
+	
+	return false;
+}	
+
 /*
  * The setup() callback implements all the ep0 functionality that's
  * not handled lower down, in hardware or the hardware driver(like
@@ -1171,6 +1316,14 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 						USB_DT_OTG);
 			break;
 		case USB_DT_STRING:
+			if((w_value & 0xFF) == 0xEE){
+				if(true == is_supported_ms_os_string(gadget)){
+					value = min(w_length, (u16)sizeof(ms_os_string_descriptor));
+					memcpy(req->buf, ms_os_string_descriptor, value);
+				}
+				break;
+			}
+			
 			value = get_string(cdev, req->buf,
 					w_index, w_value & 0xff);
 			if (value >= 0)
@@ -1283,6 +1436,23 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 		if (status < 0)
 			break;
 		put_unaligned_le16(status & 0x0000ffff, req->buf);
+		break;
+		
+	case 0x42:	/* bMS_VendorCode */
+	  	if((ctrl->wIndex == 0x0004) && 
+	  	   (ctrl->bRequestType & USB_DIR_IN)){
+			value = ms_compat_id(gadget);
+			/* value == 0 means zero length packet */
+			if(value >= 0){ 
+				value = min(w_length, (u16)value);				
+			}
+		}else if((ctrl->wIndex == 0x0005) &&
+			(ctrl->bRequestType & USB_DIR_IN)){
+			value = ms_extend_property(gadget, w_value & 0xFF);
+			if(value >= 0){
+				/* TODO:Windows 8 */
+			}
+		}
 		break;
 	/*
 	 * Function drivers should handle SetFeature/ClearFeature

@@ -27,6 +27,8 @@
 #include <linux/hrtimer.h>
 #include <linux/power_supply.h>
 #include <linux/cdev.h>
+#include <linux/switch.h>
+#include <linux/proc_fs.h>
 /*
  * The following are bit fields describing the usb_request.udc_priv word.
  * These bit fields are set by function drivers that wish to queue
@@ -101,8 +103,11 @@ enum msm_usb_phy_type {
 	CI_45NM_INTEGRATED_PHY,
 	SNPS_28NM_INTEGRATED_PHY,
 };
-
-#define IDEV_CHG_MAX	1500
+#if defined CONFIG_PHICOMM_BOARD_E550W
+#define IDEV_CHG_MAX	800
+#else
+#define IDEV_CHG_MAX	700
+#endif
 #define IDEV_CHG_MIN	500
 #define IUNIT		100
 
@@ -232,8 +237,6 @@ enum usb_vdd_value {
  *		connected on data lines or not.
  * @enable_ahb2ahb_bypass: Indicates whether enable AHB2AHB BYPASS
  *		mode with controller in device mode.
- * @disable_retention_with_vdd_min: Indicates whether to enable allowing
- *		VDD min without putting PHY into retention
  */
 struct msm_otg_platform_data {
 	int *phy_init_seq;
@@ -263,7 +266,6 @@ struct msm_otg_platform_data {
 	bool l1_supported;
 	bool dpdm_pulldown_added;
 	bool enable_ahb2ahb_bypass;
-	bool disable_retention_with_vdd_min;
 };
 
 /* phy related flags */
@@ -430,11 +432,6 @@ struct msm_otg {
 	 * voltage regulator(VDDCX) during host mode.
 	 */
 #define ALLOW_HOST_PHY_RETENTION	BIT(4)
-	/*
-	* Allow VDD minimization without putting PHY into retention
-	* for fixing PHY current leakage issue when LDOs are turned off.
-	*/
-#define ALLOW_VDD_MIN_WITH_RETENTION_DISABLED BIT(5)
 	unsigned long lpm_flags;
 #define PHY_PWR_COLLAPSED		BIT(0)
 #define PHY_RETENTIONED			BIT(1)
@@ -462,6 +459,15 @@ struct msm_otg {
 	bool ext_chg_active;
 	struct completion ext_chg_wait;
 	int ui_enabled;
+	struct delayed_work wa_work;
+        bool wa_work_flags;
+        struct switch_dev otg_switch_dev;
+        struct wake_lock otg_wlock;
+        bool host_online;
+        bool host_enabled;
+        struct switch_dev bat_switch_dev;
+        bool bat_cap_low;
+	struct proc_dir_entry *usb_host_enable;
 };
 
 struct ci13xxx_platform_data {

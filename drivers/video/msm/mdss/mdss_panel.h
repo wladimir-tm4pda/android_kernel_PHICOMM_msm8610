@@ -222,9 +222,6 @@ struct mipi_panel_info {
 
 	char vsync_enable;
 	char hw_vsync_mode;
-
-	char lp11_init;
-	u32  init_delay;
 };
 
 enum dynamic_fps_update {
@@ -296,6 +293,7 @@ struct mdss_panel_info {
 	bool dynamic_fps;
 	char dfps_update;
 	int new_fps;
+	char panel_name[32];
 
 	u32 cont_splash_enabled;
 	u32 partial_update_enabled;

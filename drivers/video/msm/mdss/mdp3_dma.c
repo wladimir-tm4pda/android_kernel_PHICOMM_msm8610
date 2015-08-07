@@ -18,7 +18,7 @@
 #include "mdp3_hwio.h"
 
 #define DMA_STOP_POLL_SLEEP_US 1000
-#define DMA_STOP_POLL_TIMEOUT_US 200000
+#define DMA_STOP_POLL_TIMEOUT_US 32000
 #define DMA_HISTO_RESET_TIMEOUT_MS 40
 #define DMA_LUT_CONFIG_MASK 0xfffffbe8
 #define DMA_CCS_CONFIG_MASK 0xfffffc17
@@ -28,22 +28,16 @@ static void mdp3_vsync_intr_handler(int type, void *arg)
 {
 	struct mdp3_dma *dma = (struct mdp3_dma *)arg;
 	struct mdp3_vsync_notification vsync_client;
-	unsigned int wait_for_next_vs;
 
 	pr_debug("mdp3_vsync_intr_handler\n");
 	spin_lock(&dma->dma_lock);
 	vsync_client = dma->vsync_client;
-	wait_for_next_vs = !dma->vsync_status;
-	dma->vsync_status = 0;
-	if (wait_for_next_vs)
-		complete(&dma->vsync_comp);
+	complete(&dma->vsync_comp);
 	spin_unlock(&dma->dma_lock);
-	if (vsync_client.handler) {
+	if (vsync_client.handler)
 		vsync_client.handler(vsync_client.arg);
-	} else {
-		if (wait_for_next_vs)
-			mdp3_irq_disable_nosync(type);
-	}
+	else
+		mdp3_irq_disable_nosync(type);
 }
 
 static void mdp3_dma_done_intr_handler(int type, void *arg)
@@ -310,22 +304,6 @@ static int mdp3_dmap_config(struct mdp3_dma *dma,
 	return 0;
 }
 
-static void mdp3_dmap_config_source(struct mdp3_dma *dma)
-{
-	struct mdp3_dma_source *source_config = &dma->source_config;
-	u32 dma_p_cfg_reg, dma_p_size;
-
-	dma_p_cfg_reg = MDP3_REG_READ(MDP3_REG_DMA_P_CONFIG);
-	dma_p_cfg_reg &= ~MDP3_DMA_IBUF_FORMAT_MASK;
-	dma_p_cfg_reg |= source_config->format << 25;
-
-	dma_p_size = source_config->width | (source_config->height << 16);
-
-	MDP3_REG_WRITE(MDP3_REG_DMA_P_CONFIG, dma_p_cfg_reg);
-	MDP3_REG_WRITE(MDP3_REG_DMA_P_SIZE, dma_p_size);
-	MDP3_REG_WRITE(MDP3_REG_DMA_P_IBUF_Y_STRIDE, source_config->stride);
-}
-
 static int mdp3_dmas_config(struct mdp3_dma *dma,
 			struct mdp3_dma_source *source_config,
 			struct mdp3_dma_output_config *output_config)
@@ -359,22 +337,6 @@ static int mdp3_dmas_config(struct mdp3_dma *dma,
 
 	mdp3_dma_callback_setup(dma);
 	return 0;
-}
-
-static void mdp3_dmas_config_source(struct mdp3_dma *dma)
-{
-	struct mdp3_dma_source *source_config = &dma->source_config;
-	u32 dma_s_cfg_reg, dma_s_size;
-
-	dma_s_cfg_reg = MDP3_REG_READ(MDP3_REG_DMA_S_CONFIG);
-	dma_s_cfg_reg &= ~MDP3_DMA_IBUF_FORMAT_MASK;
-	dma_s_cfg_reg |= source_config->format << 25;
-
-	dma_s_size = source_config->width | (source_config->height << 16);
-
-	MDP3_REG_WRITE(MDP3_REG_DMA_S_CONFIG, dma_s_cfg_reg);
-	MDP3_REG_WRITE(MDP3_REG_DMA_S_SIZE, dma_s_size);
-	MDP3_REG_WRITE(MDP3_REG_DMA_S_IBUF_Y_STRIDE, source_config->stride);
 }
 
 static int mdp3_dmap_cursor_config(struct mdp3_dma *dma,
@@ -567,23 +529,13 @@ static int mdp3_dmap_update(struct mdp3_dma *dma, void *buf,
 {
 	unsigned long flag;
 	int cb_type = MDP3_DMA_CALLBACK_TYPE_VSYNC;
-	int rc = 0;
 
 	pr_debug("mdp3_dmap_update\n");
 
 	if (dma->output_config.out_sel == MDP3_DMA_OUTPUT_SEL_DSI_CMD) {
 		cb_type = MDP3_DMA_CALLBACK_TYPE_DMA_DONE;
-		if (intf->active) {
-			rc = wait_for_completion_timeout(
-						&dma->dma_comp,
-						KOFF_TIMEOUT);
-			if (rc <= 0) {
-				WARN(1, "cmd kickoff timed out (%d)\n", rc);
-				rc = -1;
-			} else {
-				rc = 0;
-			}
-		}
+		if (intf->active)
+			wait_for_completion_killable(&dma->dma_comp);
 	}
 	spin_lock_irqsave(&dma->dma_lock, flag);
 	MDP3_REG_WRITE(MDP3_REG_DMA_P_IBUF_ADDR, (u32)buf);
@@ -598,25 +550,16 @@ static int mdp3_dmap_update(struct mdp3_dma *dma, void *buf,
 		intf->start(intf);
 	}
 
-	mb();
-	dma->vsync_status = MDP3_REG_READ(MDP3_REG_INTR_STATUS) &
-		(1 << MDP3_INTR_LCDC_START_OF_FRAME);
+	wmb();
 	init_completion(&dma->vsync_comp);
 	spin_unlock_irqrestore(&dma->dma_lock, flag);
 
 	mdp3_dma_callback_enable(dma, cb_type);
 	pr_debug("mdp3_dmap_update wait for vsync_comp in\n");
-	if (dma->output_config.out_sel == MDP3_DMA_OUTPUT_SEL_DSI_VIDEO) {
-		rc = wait_for_completion_timeout(&dma->vsync_comp,
-							KOFF_TIMEOUT);
-		if (rc <= 0) {
-			rc = -1;
-		} else {
-			rc = 0;
-		}
-	}
+	if (dma->output_config.out_sel == MDP3_DMA_OUTPUT_SEL_DSI_VIDEO)
+		wait_for_completion_killable(&dma->vsync_comp);
 	pr_debug("mdp3_dmap_update wait for vsync_comp out\n");
-	return rc;
+	return 0;
 }
 
 static int mdp3_dmas_update(struct mdp3_dma *dma, void *buf,
@@ -624,21 +567,11 @@ static int mdp3_dmas_update(struct mdp3_dma *dma, void *buf,
 {
 	unsigned long flag;
 	int cb_type = MDP3_DMA_CALLBACK_TYPE_VSYNC;
-	int rc = 0;
 
 	if (dma->output_config.out_sel == MDP3_DMA_OUTPUT_SEL_DSI_CMD) {
 		cb_type = MDP3_DMA_CALLBACK_TYPE_DMA_DONE;
-		if (intf->active) {
-			rc = wait_for_completion_killable_timeout(
-					&dma->dma_comp,
-					HZ / 2);
-			if (rc <= 0) {
-				pr_err("wait for dma done time out or error\n");
-				return (rc == 0 ? -ETIME : rc);
-			} else {
-				rc = 0;
-			}
-		}
+		if (intf->active)
+			wait_for_completion_killable(&dma->dma_comp);
 	}
 
 	spin_lock_irqsave(&dma->dma_lock, flag);
@@ -657,17 +590,9 @@ static int mdp3_dmas_update(struct mdp3_dma *dma, void *buf,
 	spin_unlock_irqrestore(&dma->dma_lock, flag);
 
 	mdp3_dma_callback_enable(dma, cb_type);
-	if (dma->output_config.out_sel == MDP3_DMA_OUTPUT_SEL_DSI_VIDEO) {
-		rc = wait_for_completion_killable_timeout(&dma->vsync_comp,
-							HZ / 2);
-		if (rc <= 0) {
-			pr_err("wait for dma done time out or error\n");
-			rc = (rc == 0 ? -ETIME : rc);
-		} else {
-			rc = 0;
-		}
-	}
-	return rc;
+	if (dma->output_config.out_sel == MDP3_DMA_OUTPUT_SEL_DSI_VIDEO)
+		wait_for_completion_killable(&dma->vsync_comp);
+	return 0;
 }
 
 static int mdp3_dmap_cursor_update(struct mdp3_dma *dma, int x, int y)
@@ -851,7 +776,6 @@ static int mdp3_dma_start(struct mdp3_dma *dma, struct mdp3_intf *intf)
 	unsigned long flag;
 	int cb_type = MDP3_DMA_CALLBACK_TYPE_VSYNC;
 	u32 dma_start_offset = MDP3_REG_DMA_P_START;
-	int rc = 0;
 
 	if (dma->dma_sel == MDP3_DMA_P)
 		dma_start_offset = MDP3_REG_DMA_P_START;
@@ -873,15 +797,9 @@ static int mdp3_dma_start(struct mdp3_dma *dma, struct mdp3_intf *intf)
 
 	mdp3_dma_callback_enable(dma, cb_type);
 	pr_debug("mdp3_dma_start wait for vsync_comp in\n");
-	rc = wait_for_completion_timeout(&dma->vsync_comp, KOFF_TIMEOUT);
-	if (rc <= 0) {
-		pr_err("wait for dma done time out or error\n");
-		rc = (rc == 0 ? -ETIME : rc);
-	} else
-		rc = 0;
-
+	wait_for_completion_killable(&dma->vsync_comp);
 	pr_debug("mdp3_dma_start wait for vsync_comp out\n");
-	return rc;
+	return 0;
 }
 
 static int mdp3_dma_stop(struct mdp3_dma *dma, struct mdp3_intf *intf)
@@ -926,7 +844,6 @@ int mdp3_dma_init(struct mdp3_dma *dma)
 	switch (dma->dma_sel) {
 	case MDP3_DMA_P:
 		dma->dma_config = mdp3_dmap_config;
-		dma->dma_config_source = mdp3_dmap_config_source;
 		dma->config_cursor = mdp3_dmap_cursor_config;
 		dma->config_ccs = mdp3_dmap_ccs_config;
 		dma->config_histo = mdp3_dmap_histo_config;
@@ -941,7 +858,6 @@ int mdp3_dma_init(struct mdp3_dma *dma)
 		break;
 	case MDP3_DMA_S:
 		dma->dma_config = mdp3_dmas_config;
-		dma->dma_config_source = mdp3_dmas_config_source;
 		dma->config_cursor = NULL;
 		dma->config_ccs = NULL;
 		dma->config_histo = NULL;

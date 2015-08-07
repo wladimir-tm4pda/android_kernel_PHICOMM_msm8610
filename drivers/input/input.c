@@ -9,6 +9,14 @@
  * under the terms of the GNU General Public License version 2 as published by
  * the Free Software Foundation.
  */
+ 
+  /* 
+  =============================================================================== 
+  when           who               why                           comment tag  
+  ------------------------------------------------------------------------------- 
+  2014-03-06  wangyuankuan    long press cannt handup  FEIXUN_AUDIO_WANGYUANKUAN_001 
+  =============================================================================== 
+*/ 
 
 #define pr_fmt(fmt) KBUILD_BASENAME ": " fmt
 
@@ -1574,9 +1582,15 @@ void input_reset_device(struct input_dev *dev)
 		 * Keys that have been pressed at suspend time are unlikely
 		 * to be still pressed when we resume.
 		 */
+		//do not release key when resume to solve long press button issue 
+		/*FEIXUN_AUDIO_WANGYUANKUAN_001 start*/
+		#if !defined(CONFIG_PHICOMM_BOARD_E550W) 
 		spin_lock_irq(&dev->event_lock);
 		input_dev_release_keys(dev);
 		spin_unlock_irq(&dev->event_lock);
+		#endif
+        /*FEIXUN_AUDIO_WANGYUANKUAN_001 end*/
+		//PHICOMM Jason add 0305		
 	}
 
 	mutex_unlock(&dev->mutex);

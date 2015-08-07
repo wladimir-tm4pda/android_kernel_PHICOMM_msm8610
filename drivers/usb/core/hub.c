@@ -159,7 +159,7 @@ MODULE_PARM_DESC(initial_descriptor_timeout,
  * otherwise the new scheme is used.  If that fails and "use_both_schemes"
  * is set, then the driver will make another attempt, using the other scheme.
  */
-static bool old_scheme_first = 0;
+static bool old_scheme_first = 1;
 module_param(old_scheme_first, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(old_scheme_first,
 		 "start with the old device initialization scheme");
@@ -1427,10 +1427,70 @@ descriptor_error:
 	return -ENODEV;
 }
 
+static void find_device(struct usb_device *parent, int idVendor , int idProduct)
+{
+	int devcount = 0;
+	int j = 0;
+	int portnum = 0;
+	struct usb_device *udev = NULL;
+	struct usb_hub *hub = NULL;
+
+	devcount = parent->maxchild;
+	for (j = 0; j < devcount; j++) {
+		if (parent->children[j] != NULL){
+			if((parent->children[j]->descriptor.idVendor == idVendor) &&
+				(parent->children[j]->descriptor.idProduct == idProduct)){
+				udev = parent->children[j];
+				portnum = j;
+				break;
+			}else {
+				find_device(parent->children[j], idVendor, idProduct);
+			}
+		}
+	}
+
+	if (udev){
+		if (!udev->actconfig){
+			return;
+		}
+		if((udev->descriptor.bDeviceProtocol == USB_CLASS_HUB) ||
+		   (udev->actconfig->interface[0]->cur_altsetting[0].desc.bInterfaceClass == USB_CLASS_HUB)){
+		   	for(j=0; j<udev->maxchild; j++){
+				if(udev->children[j] != NULL){
+					goto normal;
+				}
+				//bRequestType = H->D, Class
+				//bRequest = CLEAR_FEATURE
+				//wValue = USB_PORT_FEAT_POWER
+				//wIndex = j+1
+				//wLength = 0
+				(void)clear_port_feature(udev, j+1, USB_PORT_FEAT_POWER);
+				msleep(100);
+				hub = hdev_to_hub(udev);
+				if(hub != NULL){
+					clear_bit(j+1, hub->change_bits);
+					clear_bit(j+1, hub->event_bits);
+				}
+			}
+		}
+normal:
+		hub = hdev_to_hub(parent);
+		if(hub != NULL){
+			clear_bit(portnum+1, hub->change_bits);
+			clear_bit(portnum+1, hub->event_bits);
+		}
+		usb_disconnect(&udev);
+		parent->children[portnum] = NULL;
+		(void)clear_port_feature(parent, portnum+1, USB_PORT_FEAT_ENABLE);
+	}
+}
+
 static int
 hub_ioctl(struct usb_interface *intf, unsigned int code, void *user_data)
 {
 	struct usb_device *hdev = interface_to_usbdev (intf);
+	int idVendor = 0;
+	int idProduct = 0;
 
 	/* assert ifno == 0 (part of hub spec) */
 	switch (code) {
@@ -1455,7 +1515,15 @@ hub_ioctl(struct usb_interface *intf, unsigned int code, void *user_data)
 
 		return info->nports + 1;
 		}
+	case USBDEVFS_REMOVE_DEVICE:
+		if(!user_data){
+			return -ENODEV;
+		}
 
+		idVendor = ((int *)user_data)[0];
+		idProduct = ((int *)user_data)[1];
+		find_device(hdev, idVendor, idProduct);
+		return 0;
 	default:
 		return -ENOSYS;
 	}

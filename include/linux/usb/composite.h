@@ -115,7 +115,7 @@ struct usb_function {
 	struct usb_descriptor_header	**descriptors;
 	struct usb_descriptor_header	**hs_descriptors;
 	struct usb_descriptor_header	**ss_descriptors;
-
+	struct ms_compat_id_function  *usb_compat_id_function;
 	struct usb_configuration	*config;
 
 	/* REVISIT:  bind() functions can be marked __init, which

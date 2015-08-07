@@ -11,6 +11,15 @@
  *
  */
 #include "msm_sensor.h"
+
+
+#ifdef CONFIG_DEVICE_VERSION
+#include <mach/fdv.h>
+#define S5K4E1_I2C_ADDR 0x20
+#define DESC "S5K4E1_camera"
+#endif
+
+
 #define s5k4e1_SENSOR_NAME "s5k4e1"
 DEFINE_MSM_MUTEX(s5k4e1_mut);
 
@@ -18,58 +27,77 @@ static struct msm_sensor_ctrl_t s5k4e1_s_ctrl;
 
 static struct msm_sensor_power_setting s5k4e1_power_setting[] = {
 	{
-		.seq_type = SENSOR_VREG,
-		.seq_val = CAM_VIO,
-		.config_val = 0,
-		.delay = 0,
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_VANA,
+		.config_val = GPIO_OUT_LOW,
+		.delay = 10,
+	},
+	{
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_VANA,
+		.config_val = GPIO_OUT_HIGH,
+ 		.delay = 10,
+ 	},
+	
+	{
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_VDIG,
+		.config_val = GPIO_OUT_LOW,
+		.delay = 5,
+	},
+	{
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_VDIG,
+		.config_val = GPIO_OUT_HIGH,
+		.delay = 5,
 	},
 	{
 		.seq_type = SENSOR_VREG,
 		.seq_val = CAM_VANA,
 		.config_val = 0,
-		.delay = 0,
+		.delay = 5,
 	},
-	{
-		.seq_type = SENSOR_VREG,
-		.seq_val = CAM_VDIG,
-		.config_val = 0,
-		.delay = 0,
-	},
-	{
+	/*{
 		.seq_type = SENSOR_GPIO,
-		.seq_val = SENSOR_GPIO_RESET,
-		.config_val = GPIO_OUT_LOW,
-		.delay = 1,
-	},
-	{
-		.seq_type = SENSOR_GPIO,
-		.seq_val = SENSOR_GPIO_RESET,
+		.seq_val = SENSOR_GPIO_STANDBY,
 		.config_val = GPIO_OUT_HIGH,
-		.delay = 30,
-	},
+		.delay = 5,
+	},*/
 	{
 		.seq_type = SENSOR_GPIO,
 		.seq_val = SENSOR_GPIO_STANDBY,
 		.config_val = GPIO_OUT_LOW,
-		.delay = 1,
+		.delay = 15,
 	},
 	{
 		.seq_type = SENSOR_GPIO,
 		.seq_val = SENSOR_GPIO_STANDBY,
 		.config_val = GPIO_OUT_HIGH,
-		.delay = 30,
+		.delay = 20,
+	},
+	{
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_RESET,
+		.config_val = GPIO_OUT_LOW,
+		.delay = 5,
+	},
+	{
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_RESET,
+		.config_val = GPIO_OUT_HIGH,
+		.delay = 10,
 	},
 	{
 		.seq_type = SENSOR_CLK,
 		.seq_val = SENSOR_CAM_MCLK,
 		.config_val = 24000000,
-		.delay = 1,
+		.delay = 25,
 	},
 	{
 		.seq_type = SENSOR_I2C_MUX,
 		.seq_val = 0,
 		.config_val = 0,
-		.delay = 1,
+		.delay = 0,
 	},
 };
 
@@ -90,7 +118,17 @@ static const struct i2c_device_id s5k4e1_i2c_id[] = {
 static int32_t msm_s5k4e1_i2c_probe(struct i2c_client *client,
 	const struct i2c_device_id *id)
 {
-	return msm_sensor_i2c_probe(client, id, &s5k4e1_s_ctrl);
+int rc = 0;
+	rc = msm_sensor_i2c_probe(client, id, &s5k4e1_s_ctrl);
+	if (rc){
+		pr_err("%s %s i2c_probe failed\n",
+			__func__, client->name);
+		return rc;
+	}
+#ifdef CONFIG_DEVICE_VERSION
+	confirm_fdv(DEV_CAMERA, MANUF_S5K4E1, MANUF_S5K4E1_ID | S5K4E1_I2C_ADDR);
+#endif
+	return rc;
 }
 
 static struct i2c_driver s5k4e1_i2c_driver = {
@@ -132,6 +170,9 @@ static int32_t s5k4e1_platform_probe(struct platform_device *pdev)
 static int __init s5k4e1_init_module(void)
 {
 	int32_t rc = 0;
+#ifdef CONFIG_DEVICE_VERSION
+	register_fdv_with_desc(DEV_CAMERA, MANUF_S5K4E1, MANUF_S5K4E1_ID | S5K4E1_I2C_ADDR, DESC);
+#endif
 	pr_info("%s:%d\n", __func__, __LINE__);
 	rc = platform_driver_probe(&s5k4e1_platform_driver,
 		s5k4e1_platform_probe);
