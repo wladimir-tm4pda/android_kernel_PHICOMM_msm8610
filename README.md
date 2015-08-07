@@ -6,4 +6,4 @@ repo init -u git://codeaurora.org/platform/manifest.git -b release -m LNX.LA.3.2
 <br> obtained from http://gpl.phicomm.com
 <br> 
 <br> Model	Version	Source Code	
-<br< c230wEU	EU	c230wEU_kernel.zip
+<br> c230wEU	EU	c230wEU_kernel.zip
