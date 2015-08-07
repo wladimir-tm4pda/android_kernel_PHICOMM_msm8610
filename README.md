@@ -7,3 +7,5 @@ repo init -u git://codeaurora.org/platform/manifest.git -b release -m LNX.LA.3.2
 <br> 
 <br> Model	Version	Source Code	
 <br> c230wEU	EU	c230wEU_kernel.zip
+<br> =====================================
+<br> some modified working version
