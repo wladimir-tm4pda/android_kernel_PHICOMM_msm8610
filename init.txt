@@ -1,0 +1,16 @@
+	 git init .
+	 git remote add -t jb_3.2.1_rb1.31 origin git://codeaurora.org/quic/la/kernel/msm.git | tee -a sync.log
+	 git pull origin --tag AU_LINUX_ANDROID_JB_3.2.1_RB1.04.03.00.101.052
+	 git status 
+	 git branch -a
+	 git branch
+	 git log
+	 git checkout 
+	 ncdu
+	 git remote show
+	 git remote show origin 
+	 git tag
+	 git tag >tags.txt
+	 git tag | grep AU_LINUX_ANDROID_JB_3.2.1_RB1.04.03.00.101.052
+	 git checkout AU_LINUX_ANDROID_JB_3.2.1_RB1.04.03.00.101.052
+	 fc -nl

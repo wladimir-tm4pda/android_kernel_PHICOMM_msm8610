@@ -1,0 +1,131 @@
+
+why this branch/tag?
+-- because of info extracted from EGL libs from stock 
+
+==================
+wladimir_tm@ubuntu:~/android/T30/system/vendor/lib/egl$ strings libEGL_adreno.so
+...
+Adreno-EGL
+Invalid client version
+1.4.1
+(dpy: %d, major: %p, minor: %p)
+EGL 1.4 QUALCOMM build: AU_LINUX_ANDROID_JB_3.2.1_RB1.04.03.00.101.052_msm8610_JB_3.2.1_RB1__release_AU ()
+OpenGL ES Shader Compiler Version: 20.00.03
+Build Date: 12/10/13 Tue
+Local Branch:
+Remote Branch: quic/jb_3.2.1_rb1.31
+Local Patches: NONE
+Reconstruct Branch: AU_LINUX_ANDROID_JB_3.2.1_RB1.04.03.00.101.052 + NOTHING
+EGL API Trace Start (eglInitialize)
+
+...
+
+=================
+appr branch:
+https://www.codeaurora.org/cgit/quic/la/platform/vendor/qcom/msm8610/log/?h=jb_3.2.1_rb1.31
+
+last commit:
+AgeCommit message (Expand)AuthorFilesLines
+2014-05-08Merge "Merge f6b63e2fb9533a4860097d6ea41161025a34c465 on remote branch"
+--- LNX.LA.3.2.1-09210-8x10.0LNX.LA.3.2.1-09110-8x10.0LNX.LA.3.2.1-09010-8x10.0AU_LINUX_ANDROID_JB_3.2.1_RB1.04.03.00.101.092AU_LINUX_ANDROID_JB_3.2.1_RB1.04.03.00.101.091AU_LINUX_ANDROID_JB_3.2.1_RB1.04.03.00.101.090jb_3.2.1_rb1.31
+
+===
+BUT: need to:
+Reconstruct Branch: AU_LINUX_ANDROID_JB_3.2.1_RB1.04.03.00.101.052 + NOTHING
+
+so:
+https://www.codeaurora.org/cgit/quic/la/platform/vendor/qcom/msm8610/refs/?h=jb_3.2.1_rb1.31
+===
+find: AU_LINUX_ANDROID_JB_3.2.1_RB1.04.03.00.101.052
+https://www.codeaurora.org/cgit/quic/la/platform/vendor/qcom/msm8610/tag/?h=jb_3.2.1_rb1.31&id=AU_LINUX_ANDROID_JB_3.2.1_RB1.04.03.00.101.052
+
+======================
+======================
+======================
+and appr kernel commit:
+https://www.codeaurora.org/cgit/quic/la/kernel/msm/refs/?h=jb_3.2_rb5.31
+===
+find: AU_LINUX_ANDROID_JB_3.2.1_RB1.04.03.00.101.052
+
+https://www.codeaurora.org/cgit/quic/la/kernel/msm/tag/?h=jb_3.2_rb5.31&id=AU_LINUX_ANDROID_JB_3.2.1_RB1.04.03.00.101.052
+
+===============
+
+
+
+wladimir_tm@ubuntu:~$ mkdir jb_3.2.1_rb1.31
+
+wladimir_tm@ubuntu:~/jb_3.2.1_rb1.31$ git init .
+Initialized empty Git repository in /home/wladimir_tm/jb_3.2.1_rb1.31/.git/
+wladimir_tm@ubuntu:~/jb_3.2.1_rb1.31$ git remote add -t jb_3.2.1_rb1.31 origin git://codeaurora.org/quic/la/kernel/msm.git | tee -a sync.log
+wladimir_tm@ubuntu:~/jb_3.2.1_rb1.31$ git pull origin --tag AU_LINUX_ANDROID_JB_3.2.1_RB1.04.03.00.101.052
+remote: Counting objects: 6870195, done.
+remote: Compressing objects: 100% (1181054/1181054), done.
+Receiving objects:  94% (6470024/6870195), 1.26 GiB | 502.00 KiB/s
+...
+Receiving objects: 100% (6870195/6870195), 1.50 GiB | 1.95 MiB/s, done.
+...
+...
+ * [new tag]         v4.2       -> v4.2
+ * [new tag]         v4.2-rc1   -> v4.2-rc1
+ * [new tag]         v4.2-rc2   -> v4.2-rc2
+ * [new tag]         v4.2-rc3   -> v4.2-rc3
+ * [new tag]         v4.2-rc4   -> v4.2-rc4
+ * [new tag]         v4.2-rc5   -> v4.2-rc5
+ * [new tag]         v4.2-rc6   -> v4.2-rc6
+ * [new tag]         v4.2-rc7   -> v4.2-rc7
+ * [new tag]         v4.2-rc8   -> v4.2-rc8
+ * [new tag]         xcomm_zynq-2013-04-19 -> xcomm_zynq-2013-04-19
+error: Trying to write non-commit object 7340e36e1bf671562184559392b872950de512a4 to branch refs/heads/master
+fatal: Cannot update the ref 'HEAD'.
+wladimir_tm@ubuntu:~/jb_3.2.1_rb1.31$
+
+=====================
+wladimir_tm@ubuntu:~/jb_3.2.1_rb1.31$ git status
+HEAD detached at AU_LINUX_ANDROID_JB_3.2.1_RB1.04.03.00.101.052
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+
+        about.txt
+        init.txt
+        sync.log
+        tags.txt
+
+nothing added to commit but untracked files present (use "git add" to track)
+wladimir_tm@ubuntu:~/jb_3.2.1_rb1.31$
+=====================
+ncdu 1.10 ~ Use the arrow keys to navigate, press ? for help
+--- /home/wladimir_tm/jb_3.2.1_rb1.31 ----------------------------------------------------------------------------------
+    1.7GiB [##########] /.git
+  276.8MiB [#         ] /drivers
+  133.2MiB [          ] /arch
+   32.6MiB [          ] /fs
+   28.2MiB [          ] /sound
+   25.1MiB [          ] /include
+   21.3MiB [          ] /net
+   20.9MiB [          ] /Documentation
+    6.3MiB [          ] /firmware
+    5.2MiB [          ] /kernel
+    3.7MiB [          ] /tools
+    2.5MiB [          ] /scripts
+    2.4MiB [          ] /mm
+    2.1MiB [          ] /security
+    2.0MiB [          ] /lib
+    1.9MiB [          ] /crypto
+  964.0KiB [          ] /block
+  348.0KiB [          ]  tags.txt
+  232.0KiB [          ] /ipc
+  208.0KiB [          ]  MAINTAINERS
+  188.0KiB [          ] /virt
+  188.0KiB [          ] /samples
+  160.0KiB [          ] /init
+   96.0KiB [          ]  CREDITS
+   56.0KiB [          ]  Makefile
+   40.0KiB [          ] /usr
+   20.0KiB [          ]  COPYING
+   20.0KiB [          ]  README
+    8.0KiB [          ]  .mailmap
+    4.0KiB [          ]  AndroidKernel.mk
+    4.0KiB [          ]  REPORTING-BUGS
+    4.0KiB [          ]  about.txt
+ Total disk usage:   2.3GiB  Apparent size:   2.2GiB  Items: 55131
