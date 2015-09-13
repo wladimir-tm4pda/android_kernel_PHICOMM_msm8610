@@ -23,7 +23,6 @@ config INPUT
 	  To compile this driver as a module, choose M here: the
 	  module will be called input.
 
-if INPUT
 
 config INPUT_OF_MATRIX_KEYMAP
 	depends on USE_OF
@@ -188,7 +187,6 @@ source "drivers/input/touchscreen/Kconfig"
 
 source "drivers/input/misc/Kconfig"
 
-endif
 
 menu "Hardware I/O ports"
 
